@@ -2,7 +2,6 @@ import AppKit
 import GameController
 import ApplicationServices
 
-@NSApplicationMain
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
 
@@ -64,14 +63,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - UI building
 
     private func buildUI() {
-        let container = NSView()
-        container.translatesAutoresizingMaskIntoConstraints = false
-
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.spacing = 10
         stack.alignment = .leading
-        stack.translatesAutoresizingMaskIntoConstraints = false
 
         // ---- Connection status row ----
         let statusRow = NSStackView()
@@ -106,7 +101,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         a11yDot.layer = CALayer()
         a11yDot.layer?.cornerRadius = 5
         a11yDot.wantsLayer = true
-        updateAccessibilityDot()
 
         a11yLabel = NSTextField(labelWithString: "Checking Accessibility…")
         a11yLabel.font = NSFont.systemFont(ofSize: 12)
@@ -115,6 +109,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         a11yButton = NSButton(title: "Open Accessibility Settings", target: self, action: #selector(openAccessibilitySettings))
         a11yButton.bezelStyle = .rounded
         a11yButton.controlSize = .small
+
+        updateAccessibilityDot()
 
         a11yRow.addArrangedSubview(a11yDot)
         a11yRow.addArrangedSubview(a11yLabel)
@@ -200,17 +196,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stack.addArrangedSubview(NSView()) // spacer
         stack.addArrangedSubview(deltaLabel)
 
-        container.addSubview(stack)
-
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
-            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
-            stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 16),
-            stack.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor, constant: -16),
-            container.heightAnchor.constraint(greaterThanOrEqualToConstant: 380),
-            container.widthAnchor.constraint(greaterThanOrEqualToConstant: 360),
-        ])
-
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 400, height: 520),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
@@ -218,7 +203,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         window.title = "Controller Remap"
-        window.contentView = container
+        window.contentView = stack
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
@@ -276,7 +261,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Accessibility
 
     private func updateAccessibilityDot() {
-        guard let a11yDot = a11yDot else { return }
+        guard let a11yDot = a11yDot, let a11yLabel = a11yLabel else { return }
         let trusted = AXIsProcessTrusted()
         a11yDot.layer?.backgroundColor = trusted
             ? NSColor.systemGreen.cgColor
