@@ -182,11 +182,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         xRow.alignment = .centerY
 
         let xLabel = NSTextField(labelWithString: "X button:")
-        xLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        xLabel.font = NSFont.systemFont(ofSize: 11)
         xLabel.textColor = .secondaryLabelColor
 
         xPressedLabel = NSTextField(labelWithString: "X PRESSED")
-        xPressedLabel.font = NSFont.boldSystemFont(ofSize: 14)
+        xPressedLabel.font = NSFont.systemFont(ofSize: 13, weight: .bold)
         xPressedLabel.textColor = .systemGray
         xPressedLabel.alignment = .center
 
@@ -481,6 +481,7 @@ final class GyroVisualizerView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        guard bounds.width > 0, bounds.height > 0 else { return }
         super.draw(dirtyRect)
 
         guard let context = NSGraphicsContext.current?.cgContext else { return }
