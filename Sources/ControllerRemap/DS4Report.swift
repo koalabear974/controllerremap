@@ -209,7 +209,7 @@ struct DS4Report {
 
     private static func parseTouchpadReport0x11(_ data: Data) -> DS4TouchData {
         var t = DS4TouchData()
-        guard data.count >= 42 else { return t }
+        guard data.count >= 43 else { return t }
 
         // Byte 35: Finger 1 Status
         //   Bit 7 = 0 when touching, 1 when released
