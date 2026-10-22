@@ -51,6 +51,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Controls
     private var modeSegment: NSSegmentedControl!
     private var sensitivitySlider: NSSlider!
+    private var sensLabel: NSTextField!
+    private var sensValueLabel: NSTextField!
+    private var deadzoneLabel: NSTextField!
     private var deadzoneSlider: NSSlider!
     private var invertYCheckbox: NSButton!
     private var invertXCheckbox: NSButton!
@@ -309,24 +312,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         modeSegment.setSelected(true, forSegment: 1) // Gyro by default
 
         // ---- Sensitivity ----
-        let sensLabel = NSTextField(labelWithString: "Sensitivity")
+        sensLabel = NSTextField(labelWithString: "Sensitivity")
         sensLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
         sensLabel.textColor = .secondaryLabelColor
 
         sensitivitySlider = NSSlider()
         sensitivitySlider.doubleValue = 1.0
         sensitivitySlider.minValue = 0.1
-        sensitivitySlider.maxValue = 3.0
+        sensitivitySlider.maxValue = 10.0
+        sensitivitySlider.target = self
+        sensitivitySlider.action = #selector(sensitivityChanged(_:))
+
+        sensValueLabel = NSTextField(labelWithString: "1.0×")
+        sensValueLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        sensValueLabel.textColor = .tertiaryLabelColor
+        sensValueLabel.alignment = .right
+
+        let sensRow = NSStackView()
+        sensRow.orientation = .horizontal
+        sensRow.spacing = 8
+        sensRow.alignment = .centerY
+        sensRow.addArrangedSubview(sensLabel)
+        sensRow.addArrangedSubview(sensitivitySlider)
+        sensRow.addArrangedSubview(sensValueLabel)
 
         // ---- Deadzone ----
-        let deadzoneLabel = NSTextField(labelWithString: "Deadzone")
+        deadzoneLabel = NSTextField(labelWithString: "Deadzone")
         deadzoneLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
         deadzoneLabel.textColor = .secondaryLabelColor
 
         deadzoneSlider = NSSlider()
         deadzoneSlider.doubleValue = 0.05
         deadzoneSlider.minValue = 0.0
-        deadzoneSlider.maxValue = 0.3
+        deadzoneSlider.maxValue = 0.5
 
         // ---- Invert Y ----
         invertYCheckbox = NSButton(checkboxWithTitle: "Invert Y axis", target: nil, action: nil)
@@ -386,8 +404,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stack.addArrangedSubview(modeLabel)
         stack.addArrangedSubview(modeSegment)
         stack.addArrangedSubview(NSView()) // spacer
-        stack.addArrangedSubview(sensLabel)
-        stack.addArrangedSubview(sensitivitySlider)
+        stack.addArrangedSubview(sensRow)
         stack.addArrangedSubview(NSView()) // spacer
         stack.addArrangedSubview(deadzoneLabel)
         stack.addArrangedSubview(deadzoneSlider)
@@ -502,6 +519,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager.mode = mode
     }
 
+    @objc private func sensitivityChanged(_ sender: NSSlider) {
+        sensValueLabel.stringValue = String(format: "%.1f×", sender.doubleValue)
+        manager.sensitivity = CGFloat(sender.doubleValue)
+    }
+
     // MARK: - Tick
 
     private func tick() {
@@ -512,6 +534,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager.invertY = invertYCheckbox.state == .on
         manager.invertX = invertXCheckbox.state == .on
         manager.gyroRequiresXButton = gyroRequiresXCheckbox.state == .on
+
+        // Update sensitivity label
+        sensValueLabel.stringValue = String(format: "%.1f×", sensitivitySlider.doubleValue)
 
         // Refresh activity indicators.
         updateActivityIndicators()

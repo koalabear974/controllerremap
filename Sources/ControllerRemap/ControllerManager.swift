@@ -19,7 +19,7 @@ final class ControllerManager {
 
     var mode: RemapMode = .gyro
     var sensitivity: CGFloat = 1.0
-    var deadzone: CGFloat = 0.05
+    var deadzone: CGFloat = 0.1
     var invertY: Bool = false
     var invertX: Bool = false
 
@@ -297,8 +297,7 @@ final class ControllerManager {
     // MARK: - Gyro accumulation (called from HID callback)
 
     private func accumulateGyro(report: DS4Report) {
-        // If gyro requires X button and X is not held, do not move mouse.
-        // Reset center so next X-press starts fresh.
+        // If gyro requires X button and X is not held, do NOT move mouse.
         if gyroRequiresXButton && !buttonXPressed {
             hasGyroCenter = false
             lastGyroTimestamp = 0
