@@ -22,7 +22,7 @@ final class ControllerManager {
     /// When true, gyro only moves mouse while X button is held down.
     var gyroRequiresXButton: Bool = true
 
-    // MARK: - Activity exposure (for UI feedback)
+    // MARK: - Activity exposure
 
     private(set) var gyroActive = false
     private(set) var touchpadActive = false
@@ -50,25 +50,16 @@ final class ControllerManager {
     private(set) var buttonSharePressed = false
     private(set) var buttonOptionsPressed = false
 
-    /// Last gyro rotation rate (raw int16 values).
     private(set) var lastGyroRate: SIMD3<Double> = .zero
-    /// Last touchpad position (normalized 0-1).
     private(set) var lastTouchpadPosition: CGPoint = .zero
 
     var isControllerConnected: Bool {
         hidReader.isConnected
     }
 
-    // MARK: - Gyro hold-to-enable state
-
-    /// True when X button is held AND gyro mode is active (used by UI).
     private(set) var gyroActivelyRemapping: Bool = false
 
-    // MARK: - Debug mode
-
     var debugMode: Bool = true
-
-    // MARK: - Debug: byte change tracking
 
     private var lastRawBytes: [UInt8] = []
     private var debugInstructionsPrinted = false
@@ -78,13 +69,11 @@ final class ControllerManager {
     private let mouseMover = MouseMover()
     private let hidReader = HidControllerReader.shared
 
-    // Gyro integration state.
     private var lastGyroTimestamp: CFTimeInterval = 0
     private var gyroCenterX: Double = 0
     private var gyroCenterY: Double = 0
     private var hasGyroCenter: Bool = false
 
-    // Touchpad state.
     private var touchpadActiveTracking = false
     private var previousTouchpadPosition: CGPoint = .zero
 
@@ -104,6 +93,7 @@ final class ControllerManager {
         }
         hidReader.start()
         debugLog("ControllerManager initialized, HID reader started")
+        debugLog("DEBUG MODE: Press each button when prompted to verify mapping")
     }
 
     deinit {
@@ -232,7 +222,8 @@ final class ControllerManager {
     // MARK: - Gyro accumulation
 
     private func accumulateGyro(report: DS4Report) {
-        // If X-button required and not held, do nothing and reset center
+        // CRITICAL: If gyro requires X button and X is NOT held, do NOT move mouse.
+        // Reset center so next X-press starts fresh.
         if gyroRequiresXButton && !buttonXPressed {
             hasGyroCenter = false
             lastGyroTimestamp = 0
@@ -246,7 +237,7 @@ final class ControllerManager {
         let rateX = report.motion.gyroX
         let rateY = report.motion.gyroY
 
-        // Capture center gyro reading on first press of X button
+        // Capture center gyro reading on first press of X button.
         if !hasGyroCenter {
             gyroCenterX = rateX
             gyroCenterY = rateY
@@ -273,7 +264,6 @@ final class ControllerManager {
         guard dt > 0 else { return }
         lastGyroTimestamp = now
 
-        // Convert gyro rate delta to pixels
         let pixelsPerUnit: CGFloat = 0.1
         var dx = CGFloat(y) * CGFloat(dt) * pixelsPerUnit * sensitivity
         var dy = CGFloat(x) * CGFloat(dt) * pixelsPerUnit * sensitivity
@@ -288,6 +278,8 @@ final class ControllerManager {
             mouseMoved = true
             lastMouseDelta.x += dx
             lastMouseDelta.y += dy
+            debugLog("    gyro: MOVING dx=\(String(format: "%.2f", dx)) dy=\(String(format: "%.2f", dy)) dt=\(String(format: "%.4f", dt)) centerX=\(gyroCenterX) centerY=\(gyroCenterY)")
+
             mouseMover.moveBy(delta: CGPoint(x: dx, y: dy))
         }
     }
@@ -345,6 +337,6 @@ final class ControllerManager {
     }
 
     private func applyTouchpadIntegration(now: CFTimeInterval) {
-        // No-op: touchpad movement applied directly in accumulateTouchpad
+        // No-op
     }
 }

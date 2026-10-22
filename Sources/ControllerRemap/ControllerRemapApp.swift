@@ -556,12 +556,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let t = manager.lastTouchpadPosition
         touchpadLabel.stringValue = String(format: "Touchpad: x:%+.2f y:%+.2f", t.x, t.y)
 
-        // Gyro X-Y visualizer
-        let normX = max(-1, min(1, g.y / 4500))
-        let normY = max(-1, min(1, g.x / 4500))
-        let dotX = 55 + CGFloat(normX) * 50
-        let dotY = 55 - CGFloat(normY) * 50
-        gyroDotView.frame = CGRect(x: dotX, y: dotY, width: 10, height: 10)
+        // Gyro X-Y visualizer - only show movement when X button is held
+        if gyroRequiresXCheckbox.state == .on && !manager.buttonXPressed {
+            // Gyro not active - center the dot
+            gyroDotView.frame = CGRect(x: 55, y: 55, width: 10, height: 10)
+        } else {
+            let normX = max(-1, min(1, g.y / 4500))
+            let normY = max(-1, min(1, g.x / 4500))
+            let dotX = 55 + CGFloat(normX) * 50
+            let dotY = 55 - CGFloat(normY) * 50
+            gyroDotView.frame = CGRect(x: dotX, y: dotY, width: 10, height: 10)
+        }
 
         // Touchpad X-Y visualizer
         let tpDotX = 5 + t.x * 180
