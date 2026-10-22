@@ -44,6 +44,22 @@ final class ControllerManager {
     private(set) var buttonSquarePressed = false
     /// True if Triangle button is currently pressed.
     private(set) var buttonTrianglePressed = false
+    /// True if L1 button is currently pressed.
+    private(set) var buttonL1Pressed = false
+    /// True if R1 button is currently pressed.
+    private(set) var buttonR1Pressed = false
+    /// True if L2 button is currently pressed.
+    private(set) var buttonL2Pressed = false
+    /// True if R2 button is currently pressed.
+    private(set) var buttonR2Pressed = false
+    /// True if D-pad up is currently pressed.
+    private(set) var buttonDpadUpPressed = false
+    /// True if D-pad down is currently pressed.
+    private(set) var buttonDpadDownPressed = false
+    /// True if D-pad left is currently pressed.
+    private(set) var buttonDpadLeftPressed = false
+    /// True if D-pad right is currently pressed.
+    private(set) var buttonDpadRightPressed = false
 
     /// Last gyro rotation rate (radians/sec).
     private(set) var lastGyroRate: SIMD3<Double> = .zero
@@ -118,30 +134,55 @@ final class ControllerManager {
         }
     }
 
-    /// Reads face buttons for debug display.
-    /// PS4 mapping: Cross=A, Circle=B, Square=X, Triangle=Y
+    /// Reads all buttons for debug display.
+    /// PS4 -> GCController mapping on macOS:
+    ///   Cross(X)   = buttonA
+    ///   Circle(O)  = buttonB
+    ///   Square(□)  = buttonX
+    ///   Triangle(△)= buttonY
+    ///   L1         = leftShoulder
+    ///   R1         = rightShoulder
+    ///   L2         = leftTrigger
+    ///   R2         = rightTrigger
+    ///   D-pad      = dpad
+    ///   PS button  = buttonHome (may not be exposed)
+    ///   Share      = ? (may not be exposed)
+    ///   Options    = ? (may not be exposed)
     private func readButtons(_ controller: GCController) {
         guard let extendedGamepad = controller.extendedGamepad else { return }
 
-        // Cross / X button -> buttonA.
-        if extendedGamepad.buttonA.isPressed {
-            buttonXPressed = true
-            debugLog("    buttonCross(A) PRESSED")
-        }
-        // Circle / O button -> buttonB.
-        if extendedGamepad.buttonB.isPressed {
-            buttonCirclePressed = true
-            debugLog("    buttonCircle(B) PRESSED")
-        }
-        // Square / □ button -> buttonX.
-        if extendedGamepad.buttonX.isPressed {
-            buttonSquarePressed = true
-            debugLog("    buttonSquare(X) PRESSED")
-        }
-        // Triangle / △ button -> buttonY.
-        if extendedGamepad.buttonY.isPressed {
-            buttonTrianglePressed = true
-            debugLog("    buttonTriangle(Y) PRESSED")
+        // Face buttons (PS4 mapping).
+        checkButton("Cross(X)", pressed: extendedGamepad.buttonA.isPressed, state: &buttonXPressed)
+        checkButton("Circle(O)", pressed: extendedGamepad.buttonB.isPressed, state: &buttonCirclePressed)
+        checkButton("Square(□)", pressed: extendedGamepad.buttonX.isPressed, state: &buttonSquarePressed)
+        checkButton("Triangle(△)", pressed: extendedGamepad.buttonY.isPressed, state: &buttonTrianglePressed)
+
+        // Shoulder buttons.
+        checkButton("L1", pressed: extendedGamepad.leftShoulder.isPressed, state: &buttonL1Pressed)
+        checkButton("R1", pressed: extendedGamepad.rightShoulder.isPressed, state: &buttonR1Pressed)
+
+        // Triggers (analog, treat > 0.5 as pressed).
+        let l2 = extendedGamepad.leftTrigger.isPressed
+        let r2 = extendedGamepad.rightTrigger.isPressed
+        checkButton("L2", pressed: l2, state: &buttonL2Pressed)
+        checkButton("R2", pressed: r2, state: &buttonR2Pressed)
+
+        // D-pad.
+        let dpad = extendedGamepad.dpad
+        checkButton("D-pad Up", pressed: dpad.up.isPressed, state: &buttonDpadUpPressed)
+        checkButton("D-pad Down", pressed: dpad.down.isPressed, state: &buttonDpadDownPressed)
+        checkButton("D-pad Left", pressed: dpad.left.isPressed, state: &buttonDpadLeftPressed)
+        checkButton("D-pad Right", pressed: dpad.right.isPressed, state: &buttonDpadRightPressed)
+    }
+
+    /// Logs a button press/release only when state changes.
+    private func checkButton(_ name: String, pressed: Bool, state: inout Bool) {
+        if pressed && !state {
+            state = true
+            debugLog("    button \(name) PRESSED")
+        } else if !pressed && state {
+            state = false
+            debugLog("    button \(name) RELEASED")
         }
     }
 
