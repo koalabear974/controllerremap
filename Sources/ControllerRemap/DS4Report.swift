@@ -209,31 +209,29 @@ struct DS4Report {
 
     private static func parseTouchpadReport0x11(_ data: Data) -> DS4TouchData {
         var t = DS4TouchData()
-        guard data.count >= 43 else { return t }
+        guard data.count >= 45 else { return t }
 
-        // Byte 35: Finger 1 Status
+        // Byte 37: Finger 1 Status & Packet Counter
         //   Bit 7 = 0 when touching, 1 when released
         //   Bits [6:0] = tracking packet counter
-        let f1Status = data[35]
+        let f1Status = data[37]
         t.finger0Active = (f1Status & 0x80) == 0  // Active when bit 7 is 0
 
-        // Bytes 36-38: Finger 1 Coordinates (24-bit packed)
-        //   X = ((Byte 37 & 0x0F) << 8) | Byte 36
-        //   Y = (Byte 38 << 4) | ((Byte 37 & 0xF0) >> 4)
-        let f1X = ((UInt16(data[37] & 0x0F) << 8) | UInt16(data[36]))
-        let f1Y = ((UInt16(data[38]) << 4) | UInt16((data[37] & 0xF0) >> 4))
+        // Bytes 38-40: Finger 1 Coordinates (24-bit packed)
+        //   X = ((Byte 39 & 0x0F) << 8) | Byte 38
+        //   Y = (Byte 40 << 4) | ((Byte 39 & 0xF0) >> 4)
+        let f1X = ((UInt16(data[39] & 0x0F) << 8) | UInt16(data[38]))
+        let f1Y = ((UInt16(data[40]) << 4) | UInt16((data[39] & 0xF0) >> 4))
         t.finger0X = f1X
         t.finger0Y = f1Y
 
-        // Bytes 39-42: Finger 2 (same structure)
-        if data.count >= 42 {
-            let f2Status = data[39]
-            t.finger1Active = (f2Status & 0x80) == 0
-            let f2X = ((UInt16(data[41] & 0x0F) << 8) | UInt16(data[40]))
-            let f2Y = ((UInt16(data[42]) << 4) | UInt16((data[41] & 0xF0) >> 4))
-            t.finger1X = f2X
-            t.finger1Y = f2Y
-        }
+        // Bytes 41-44: Finger 2 Status & Coordinates (same structure)
+        let f2Status = data[41]
+        t.finger1Active = (f2Status & 0x80) == 0
+        let f2X = ((UInt16(data[43] & 0x0F) << 8) | UInt16(data[42]))
+        let f2Y = ((UInt16(data[44]) << 4) | UInt16((data[43] & 0xF0) >> 4))
+        t.finger1X = f2X
+        t.finger1Y = f2Y
 
         return t
     }

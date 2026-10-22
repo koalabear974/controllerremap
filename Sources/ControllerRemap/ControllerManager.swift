@@ -21,6 +21,7 @@ final class ControllerManager {
     var sensitivity: CGFloat = 1.0
     var deadzone: CGFloat = 0.05
     var invertY: Bool = false
+    var invertX: Bool = false
 
     // MARK: - Debug mode
 
@@ -380,11 +381,13 @@ final class ControllerManager {
         if abs(deltaX) < deadzone { deltaX = 0 }
         if abs(deltaY) < deadzone { deltaY = 0 }
 
+        // Apply axis inversion.
+        if invertX { deltaX = -deltaX }
+        if invertY { deltaY = -deltaY }
+
         let pixelsPerUnit: CGFloat = 500.0
         let dx = deltaX * pixelsPerUnit * sensitivity
         var dy = deltaY * pixelsPerUnit * sensitivity
-
-        if invertY { dy = -dy }
 
         lastTouchpadDelta = CGPoint(x: dx, y: dy)
 

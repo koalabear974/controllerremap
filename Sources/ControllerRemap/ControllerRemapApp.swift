@@ -53,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var sensitivitySlider: NSSlider!
     private var deadzoneSlider: NSSlider!
     private var invertYCheckbox: NSButton!
+    private var invertXCheckbox: NSButton!
 
     // MARK: - App lifecycle
 
@@ -330,6 +331,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         invertYCheckbox = NSButton(checkboxWithTitle: "Invert Y axis", target: nil, action: nil)
         invertYCheckbox.state = .off
 
+        // ---- Invert X ----
+        invertXCheckbox = NSButton(checkboxWithTitle: "Invert X axis", target: nil, action: nil)
+        invertXCheckbox.state = .off
+
         // ---- Live delta readout ----
         deltaLabel = NSTextField(labelWithString: "ΔX: 0.0   ΔY: 0.0")
         deltaLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
@@ -383,6 +388,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stack.addArrangedSubview(deadzoneSlider)
         stack.addArrangedSubview(NSView()) // spacer
         stack.addArrangedSubview(invertYCheckbox)
+        stack.addArrangedSubview(invertXCheckbox)
         stack.addArrangedSubview(NSView()) // spacer
         stack.addArrangedSubview(deltaLabel)
         stack.addArrangedSubview(gyroRateLabel)
@@ -498,6 +504,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager.sensitivity = CGFloat(sensitivitySlider.doubleValue)
         manager.deadzone = CGFloat(deadzoneSlider.doubleValue)
         manager.invertY = invertYCheckbox.state == .on
+        manager.invertX = invertXCheckbox.state == .on
 
         // Refresh activity indicators.
         updateActivityIndicators()
