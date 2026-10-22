@@ -11,44 +11,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusDot: NSView!
     private var statusLabel: NSTextField!
 
-    // System / security
     private var a11yDot: NSView!
     private var a11yLabel: NSTextField!
     private var a11yButton: NSButton!
 
-    // Input activity
     private var gyroActivityDotView: NSStackView!
     private var touchpadDotView: NSStackView!
     private var mouseDotView: NSStackView!
     private var deltaLabel: NSTextField!
 
-    // Button debug
     private var buttonXDotView: NSStackView!
     private var buttonCircleDotView: NSStackView!
     private var buttonSquareDotView: NSStackView!
     private var buttonTriangleDotView: NSStackView!
 
-    // Big X button press indicator
     private var xPressedLabel: NSTextField!
 
-    // Gyro X-Y visualizer (simple subviews, no custom draw)
     private var gyroVisualizerContainer: NSView!
     private var gyroDotView: NSView!
     private var gyroHLine: NSView!
     private var gyroVLine: NSView!
 
-    // Touchpad X-Y visualizer
     private var touchpadVisualizerContainer: NSView!
     private var tpDotView: NSView!
     private var touchpadHLine: NSView!
     private var touchpadVLine: NSView!
     private var touchpadClickLabel: NSTextField!
 
-    // Raw value readouts
     private var gyroRateLabel: NSTextField!
     private var touchpadLabel: NSTextField!
 
-    // Controls
     private var modeSegment: NSSegmentedControl!
     private var sensitivitySlider: NSSlider!
     private var sensLabel: NSTextField!
@@ -68,7 +60,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildUI()
         print("ControllerRemap: buildUI done")
 
-        // Set up HID controller connection callback
         manager.onControllerConnectedChanged { [weak self] connected in
             self?.updateStatusDot(connected: connected)
         }
@@ -109,7 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusRow.addArrangedSubview(statusDot)
         statusRow.addArrangedSubview(statusLabel)
 
-        // ---- Accessibility / security row ----
+        // ---- Accessibility row ----
         let a11yRow = NSStackView()
         a11yRow.orientation = .horizontal
         a11yRow.spacing = 8
@@ -134,10 +125,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         a11yRow.addArrangedSubview(a11yDot)
         a11yRow.addArrangedSubview(a11yLabel)
-        a11yRow.addArrangedSubview(NSView()) // spacer
+        a11yRow.addArrangedSubview(NSView())
         a11yRow.addArrangedSubview(a11yButton)
 
-        // ---- Input activity row ----
+        // ---- Activity row ----
         let activityRow = NSStackView()
         activityRow.orientation = .horizontal
         activityRow.spacing = 12
@@ -155,7 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         activityRow.addArrangedSubview(gyroActivityDotView)
         activityRow.addArrangedSubview(touchpadDotView)
         activityRow.addArrangedSubview(mouseDotView)
-        activityRow.addArrangedSubview(NSView()) // spacer
+        activityRow.addArrangedSubview(NSView())
 
         // ---- Button debug row ----
         let buttonRow = NSStackView()
@@ -177,9 +168,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buttonRow.addArrangedSubview(buttonCircleDotView)
         buttonRow.addArrangedSubview(buttonSquareDotView)
         buttonRow.addArrangedSubview(buttonTriangleDotView)
-        buttonRow.addArrangedSubview(NSView()) // spacer
+        buttonRow.addArrangedSubview(NSView())
 
-        // ---- Big X button press indicator ----
+        // ---- Big X button indicator ----
         let xRow = NSStackView()
         xRow.orientation = .horizontal
         xRow.spacing = 8
@@ -196,7 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         xRow.addArrangedSubview(xLabel)
         xRow.addArrangedSubview(xPressedLabel)
-        xRow.addArrangedSubview(NSView()) // spacer
+        xRow.addArrangedSubview(NSView())
 
         // ---- Gyro X-Y visualizer ----
         gyroVisualizerContainer = NSView()
@@ -209,7 +200,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         gyroVisualizerContainer.heightAnchor.constraint(equalToConstant: 120).isActive = true
         gyroVisualizerContainer.widthAnchor.constraint(equalToConstant: 120).isActive = true
 
-        // Crosshair lines
         gyroHLine = NSView()
         gyroHLine.wantsLayer = true
         gyroHLine.layer?.backgroundColor = NSColor.separatorColor.cgColor
@@ -224,7 +214,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         gyroVLine.widthAnchor.constraint(equalToConstant: 2).isActive = true
         gyroVLine.heightAnchor.constraint(equalToConstant: 120).isActive = true
 
-        // Gyro dot
         gyroDotView = NSView()
         gyroDotView.wantsLayer = true
         gyroDotView.layer?.backgroundColor = NSColor.systemBlue.cgColor
@@ -238,7 +227,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         gyroVisualizerContainer.addSubview(gyroVLine)
         gyroVisualizerContainer.addSubview(gyroDotView)
 
-        // Center the crosshair; dot starts at center via frame (not constraints)
         NSLayoutConstraint.activate([
             gyroHLine.centerXAnchor.constraint(equalTo: gyroVisualizerContainer.centerXAnchor),
             gyroHLine.centerYAnchor.constraint(equalTo: gyroVisualizerContainer.centerYAnchor),
@@ -257,7 +245,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         touchpadVisualizerContainer.heightAnchor.constraint(equalToConstant: 120).isActive = true
         touchpadVisualizerContainer.widthAnchor.constraint(equalToConstant: 190).isActive = true
 
-        // Crosshair lines
         touchpadHLine = NSView()
         touchpadHLine.wantsLayer = true
         touchpadHLine.layer?.backgroundColor = NSColor.separatorColor.cgColor
@@ -272,10 +259,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         touchpadVLine.widthAnchor.constraint(equalToConstant: 2).isActive = true
         touchpadVLine.heightAnchor.constraint(equalToConstant: 120).isActive = true
 
-        // Touchpad dot
         tpDotView = NSView()
         tpDotView.wantsLayer = true
-        tpDotView.layer?.backgroundColor = NSColor.systemGreen.cgColor
+        tpDotView.layer?.backgroundColor = NSColor.systemBlue.cgColor
         tpDotView.layer?.cornerRadius = 5
         tpDotView.translatesAutoresizingMaskIntoConstraints = false
         tpDotView.widthAnchor.constraint(equalToConstant: 10).isActive = true
@@ -286,7 +272,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         touchpadVisualizerContainer.addSubview(touchpadVLine)
         touchpadVisualizerContainer.addSubview(tpDotView)
 
-        // Center the crosshair; dot starts at center via frame
         NSLayoutConstraint.activate([
             touchpadHLine.centerXAnchor.constraint(equalTo: touchpadVisualizerContainer.centerXAnchor),
             touchpadHLine.centerYAnchor.constraint(equalTo: touchpadVisualizerContainer.centerYAnchor),
@@ -294,7 +279,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             touchpadVLine.centerYAnchor.constraint(equalTo: touchpadVisualizerContainer.centerYAnchor),
         ])
 
-        // Touchpad click indicator label
         touchpadClickLabel = NSTextField(labelWithString: "Touchpad: released")
         touchpadClickLabel.font = NSFont.systemFont(ofSize: 12, weight: .bold)
         touchpadClickLabel.textColor = .secondaryLabelColor
@@ -309,7 +293,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                          trackingMode: .selectOne,
                                          target: self,
                                          action: #selector(modeChanged))
-        modeSegment.setSelected(true, forSegment: 1) // Gyro by default
+        modeSegment.setSelected(true, forSegment: 1)
 
         // ---- Sensitivity ----
         sensLabel = NSTextField(labelWithString: "Sensitivity")
@@ -390,35 +374,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         stack.addArrangedSubview(statusRow)
         stack.addArrangedSubview(a11yRow)
-        stack.addArrangedSubview(NSView()) // spacer
+        stack.addArrangedSubview(NSView())
         stack.addArrangedSubview(activityRow)
-        stack.addArrangedSubview(NSView()) // spacer
+        stack.addArrangedSubview(NSView())
         stack.addArrangedSubview(buttonRow)
         stack.addArrangedSubview(xRow)
-        stack.addArrangedSubview(NSView()) // spacer
+        stack.addArrangedSubview(NSView())
         stack.addArrangedSubview(gyroVisualizerContainer)
-        stack.addArrangedSubview(NSView()) // spacer
+        stack.addArrangedSubview(NSView())
         stack.addArrangedSubview(touchpadVisualizerContainer)
         stack.addArrangedSubview(touchpadClickLabel)
-        stack.addArrangedSubview(NSView()) // spacer
+        stack.addArrangedSubview(NSView())
         stack.addArrangedSubview(modeLabel)
         stack.addArrangedSubview(modeSegment)
-        stack.addArrangedSubview(NSView()) // spacer
+        stack.addArrangedSubview(NSView())
         stack.addArrangedSubview(sensRow)
-        stack.addArrangedSubview(NSView()) // spacer
+        stack.addArrangedSubview(NSView())
         stack.addArrangedSubview(deadzoneLabel)
         stack.addArrangedSubview(deadzoneSlider)
-        stack.addArrangedSubview(NSView()) // spacer
+        stack.addArrangedSubview(NSView())
         stack.addArrangedSubview(invertYCheckbox)
         stack.addArrangedSubview(invertXCheckbox)
         stack.addArrangedSubview(gyroRequiresXCheckbox)
-        stack.addArrangedSubview(NSView()) // spacer
+        stack.addArrangedSubview(NSView())
         stack.addArrangedSubview(deltaLabel)
         stack.addArrangedSubview(gyroRateLabel)
         stack.addArrangedSubview(touchpadLabel)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 700),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 750),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -436,7 +420,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         print("Window created: \(String(describing: window)), isVisible: \(window.isVisible)")
     }
 
-    /// Builds an activity indicator stack: [dot][label].
     private func activityDotView(label: String) -> NSStackView {
         let row = NSStackView()
         row.orientation = .horizontal
@@ -535,10 +518,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager.invertX = invertXCheckbox.state == .on
         manager.gyroRequiresXButton = gyroRequiresXCheckbox.state == .on
 
-        // Update sensitivity label
         sensValueLabel.stringValue = String(format: "%.1f×", sensitivitySlider.doubleValue)
 
-        // Refresh activity indicators.
         updateActivityIndicators()
         updateButtonIndicators()
         updateRawValueReadouts()
@@ -550,7 +531,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setDotColor(gyroActivityDotView, active: manager.gyroActive)
         setDotColor(mouseDotView, active: manager.mouseMoved, activeColor: NSColor.systemBlue.cgColor)
 
-        // Live delta readout.
         let d = manager.lastMouseDelta
         deltaLabel.stringValue = String(format: "ΔX: %+.2f   ΔY: %+.2f", d.x, d.y)
     }
@@ -561,7 +541,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setDotColor(buttonSquareDotView, active: manager.buttonSquarePressed)
         setDotColor(buttonTriangleDotView, active: manager.buttonTrianglePressed)
 
-        // Big X button press indicator.
         xPressedLabel.textColor = manager.buttonXPressed
             ? NSColor.systemGreen
             : NSColor.systemGray
@@ -577,29 +556,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let t = manager.lastTouchpadPosition
         touchpadLabel.stringValue = String(format: "Touchpad: x:%+.2f y:%+.2f", t.x, t.y)
 
-        // Update gyro X-Y visualizer dot position.
-        // Normalize gyro values (±4500 range) to fit in 120x120 view (center at 60,60).
-        // Rotate 90 deg: swap X and Y.
-        // Apply invert X/Y to match mouse movement direction.
-        var normX = max(-1, min(1, g.y / 4500))
-        var normY = max(-1, min(1, g.x / 4500))
-        if manager.invertX { normX = -normX }
-        if manager.invertY { normY = -normY }
+        // Gyro X-Y visualizer
+        let normX = max(-1, min(1, g.y / 4500))
+        let normY = max(-1, min(1, g.x / 4500))
         let dotX = 55 + CGFloat(normX) * 50
-        let dotY = 55 - CGFloat(normY) * 50 // Y inverted for screen coords
+        let dotY = 55 - CGFloat(normY) * 50
         gyroDotView.frame = CGRect(x: dotX, y: dotY, width: 10, height: 10)
 
-        // Update touchpad X-Y visualizer dot position.
-        // Touchpad normalized (0-1) mapped to 190x120 box (center at 95,60).
+        // Touchpad X-Y visualizer
         let tpDotX = 5 + t.x * 180
-        let tpDotY = 5 + (1 - t.y) * 110 // Y inverted for screen coords
+        let tpDotY = 5 + (1 - t.y) * 110
+        tpDotView.frame = CGRect(x: tpDotX, y: tpDotY, width: 10, height: 10)
 
-        // Update touchpad dot color based on touch state.
         tpDotView.layer?.backgroundColor = manager.touchpadActive
             ? NSColor.systemGreen.cgColor
             : NSColor.systemBlue.cgColor
 
-        // Make touchpad dot bigger and red when clicked.
         if manager.buttonTouchpadPressed {
             tpDotView.layer?.cornerRadius = 8
             tpDotView.frame = CGRect(x: tpDotX - 3, y: tpDotY - 3, width: 16, height: 16)
@@ -609,7 +581,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             tpDotView.frame = CGRect(x: tpDotX, y: tpDotY, width: 10, height: 10)
         }
 
-        // Update touchpad click label.
         let isTouching = manager.touchpadActive || manager.buttonTouchpadPressed
         touchpadClickLabel.textColor = isTouching
             ? NSColor.systemGreen
