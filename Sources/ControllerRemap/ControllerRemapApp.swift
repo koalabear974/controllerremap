@@ -37,6 +37,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var gyroHLine: NSView!
     private var gyroVLine: NSView!
 
+    // Touchpad X-Y visualizer
+    private var touchpadVisualizerContainer: NSView!
+    private var tpDotView: NSView!
+    private var touchpadHLine: NSView!
+    private var touchpadVLine: NSView!
+    private var touchpadClickLabel: NSTextField!
+
     // Raw value readouts
     private var gyroRateLabel: NSTextField!
     private var touchpadLabel: NSTextField!
@@ -220,20 +227,73 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         gyroDotView.translatesAutoresizingMaskIntoConstraints = false
         gyroDotView.widthAnchor.constraint(equalToConstant: 10).isActive = true
         gyroDotView.heightAnchor.constraint(equalToConstant: 10).isActive = true
+        gyroDotView.frame = CGRect(x: 55, y: 55, width: 10, height: 10)
 
         gyroVisualizerContainer.addSubview(gyroHLine)
         gyroVisualizerContainer.addSubview(gyroVLine)
         gyroVisualizerContainer.addSubview(gyroDotView)
 
-        // Center the crosshair and dot initially
+        // Center the crosshair; dot starts at center via frame (not constraints)
         NSLayoutConstraint.activate([
             gyroHLine.centerXAnchor.constraint(equalTo: gyroVisualizerContainer.centerXAnchor),
             gyroHLine.centerYAnchor.constraint(equalTo: gyroVisualizerContainer.centerYAnchor),
             gyroVLine.centerXAnchor.constraint(equalTo: gyroVisualizerContainer.centerXAnchor),
             gyroVLine.centerYAnchor.constraint(equalTo: gyroVisualizerContainer.centerYAnchor),
-            gyroDotView.centerXAnchor.constraint(equalTo: gyroVisualizerContainer.centerXAnchor),
-            gyroDotView.centerYAnchor.constraint(equalTo: gyroVisualizerContainer.centerYAnchor),
         ])
+
+        // ---- Touchpad X-Y visualizer ----
+        touchpadVisualizerContainer = NSView()
+        touchpadVisualizerContainer.wantsLayer = true
+        touchpadVisualizerContainer.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        touchpadVisualizerContainer.layer?.cornerRadius = 6
+        touchpadVisualizerContainer.layer?.borderColor = NSColor.separatorColor.cgColor
+        touchpadVisualizerContainer.layer?.borderWidth = 1
+        touchpadVisualizerContainer.translatesAutoresizingMaskIntoConstraints = false
+        touchpadVisualizerContainer.heightAnchor.constraint(equalToConstant: 120).isActive = true
+        touchpadVisualizerContainer.widthAnchor.constraint(equalToConstant: 190).isActive = true
+
+        // Crosshair lines
+        touchpadHLine = NSView()
+        touchpadHLine.wantsLayer = true
+        touchpadHLine.layer?.backgroundColor = NSColor.separatorColor.cgColor
+        touchpadHLine.translatesAutoresizingMaskIntoConstraints = false
+        touchpadHLine.heightAnchor.constraint(equalToConstant: 2).isActive = true
+        touchpadHLine.widthAnchor.constraint(equalToConstant: 190).isActive = true
+
+        touchpadVLine = NSView()
+        touchpadVLine.wantsLayer = true
+        touchpadVLine.layer?.backgroundColor = NSColor.separatorColor.cgColor
+        touchpadVLine.translatesAutoresizingMaskIntoConstraints = false
+        touchpadVLine.widthAnchor.constraint(equalToConstant: 2).isActive = true
+        touchpadVLine.heightAnchor.constraint(equalToConstant: 120).isActive = true
+
+        // Touchpad dot
+        tpDotView = NSView()
+        tpDotView.wantsLayer = true
+        tpDotView.layer?.backgroundColor = NSColor.systemGreen.cgColor
+        tpDotView.layer?.cornerRadius = 5
+        tpDotView.translatesAutoresizingMaskIntoConstraints = false
+        tpDotView.widthAnchor.constraint(equalToConstant: 10).isActive = true
+        tpDotView.heightAnchor.constraint(equalToConstant: 10).isActive = true
+        tpDotView.frame = CGRect(x: 85, y: 55, width: 10, height: 10)
+
+        touchpadVisualizerContainer.addSubview(touchpadHLine)
+        touchpadVisualizerContainer.addSubview(touchpadVLine)
+        touchpadVisualizerContainer.addSubview(tpDotView)
+
+        // Center the crosshair; dot starts at center via frame
+        NSLayoutConstraint.activate([
+            touchpadHLine.centerXAnchor.constraint(equalTo: touchpadVisualizerContainer.centerXAnchor),
+            touchpadHLine.centerYAnchor.constraint(equalTo: touchpadVisualizerContainer.centerYAnchor),
+            touchpadVLine.centerXAnchor.constraint(equalTo: touchpadVisualizerContainer.centerXAnchor),
+            touchpadVLine.centerYAnchor.constraint(equalTo: touchpadVisualizerContainer.centerYAnchor),
+        ])
+
+        // Touchpad click indicator label
+        touchpadClickLabel = NSTextField(labelWithString: "Touchpad: released")
+        touchpadClickLabel.font = NSFont.systemFont(ofSize: 11)
+        touchpadClickLabel.textColor = .secondaryLabelColor
+        touchpadClickLabel.alignment = .center
 
         // ---- Mode selector ----
         let modeLabel = NSTextField(labelWithString: "Mode")
@@ -309,6 +369,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stack.addArrangedSubview(xRow)
         stack.addArrangedSubview(NSView()) // spacer
         stack.addArrangedSubview(gyroVisualizerContainer)
+        stack.addArrangedSubview(NSView()) // spacer
+        stack.addArrangedSubview(touchpadVisualizerContainer)
+        stack.addArrangedSubview(touchpadClickLabel)
         stack.addArrangedSubview(NSView()) // spacer
         stack.addArrangedSubview(modeLabel)
         stack.addArrangedSubview(modeSegment)
@@ -446,7 +509,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateActivityIndicators() {
         setDotColor(gyroActivityDotView, active: manager.gyroActive)
-        setDotColor(touchpadDotView, active: manager.touchpadActive)
         setDotColor(mouseDotView, active: manager.mouseMoved, activeColor: NSColor.systemBlue.cgColor)
 
         // Live delta readout.
@@ -477,12 +539,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         touchpadLabel.stringValue = String(format: "Touchpad: x:%+.2f y:%+.2f", t.x, t.y)
 
         // Update gyro X-Y visualizer dot position.
-        // Normalize gyro values (±2000 range) to fit in 120x120 view (center at 60,60).
-        let normX = max(-1, min(1, g.x / 2000))
-        let normY = max(-1, min(1, g.y / 2000))
+        // Normalize gyro values (±4500 range) to fit in 120x120 view (center at 60,60).
+        let normX = max(-1, min(1, g.x / 4500))
+        let normY = max(-1, min(1, g.y / 4500))
         let dotX = 55 + CGFloat(normX) * 50
         let dotY = 55 - CGFloat(normY) * 50 // Y inverted for screen coords
         gyroDotView.frame = CGRect(x: dotX, y: dotY, width: 10, height: 10)
+
+        // Update touchpad X-Y visualizer dot position.
+        // Touchpad normalized (0-1) mapped to 190x120 box (center at 95,60).
+        let tpDotX = 5 + t.x * 180
+        let tpDotY = 5 + (1 - t.y) * 110 // Y inverted for screen coords
+        tpDotView.frame = CGRect(x: tpDotX, y: tpDotY, width: 10, height: 10)
+
+        // Update touchpad dot color and click label based on touch state.
+        tpDotView.layer?.backgroundColor = manager.touchpadActive
+            ? NSColor.systemGreen.cgColor
+            : NSColor.systemBlue.cgColor
+        touchpadClickLabel.textColor = manager.touchpadActive
+            ? NSColor.systemGreen
+            : NSColor.systemGray
+        touchpadClickLabel.stringValue = manager.touchpadActive
+            ? "Touchpad: touched"
+            : "Touchpad: released"
     }
 
     private func setDotColor(_ stack: NSStackView, active: Bool, activeColor: CGColor = NSColor.systemGreen.cgColor) {
