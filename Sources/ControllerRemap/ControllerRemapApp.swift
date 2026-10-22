@@ -23,6 +23,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mouseDotView: NSStackView!
     private var deltaLabel: NSTextField!
 
+    // Button debug
+    private var buttonXDotView: NSStackView!
+    private var buttonCircleDotView: NSStackView!
+    private var buttonSquareDotView: NSStackView!
+    private var buttonTriangleDotView: NSStackView!
+
+    // Raw value readouts
+    private var gyroRateLabel: NSTextField!
+    private var touchpadLabel: NSTextField!
+
     // Controls
     private var modeSegment: NSSegmentedControl!
     private var sensitivitySlider: NSSlider!
@@ -137,6 +147,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         activityRow.addArrangedSubview(mouseDotView)
         activityRow.addArrangedSubview(NSView()) // spacer
 
+        // ---- Button debug row ----
+        let buttonRow = NSStackView()
+        buttonRow.orientation = .horizontal
+        buttonRow.spacing = 12
+        buttonRow.alignment = .centerY
+
+        let buttonLabel = NSTextField(labelWithString: "Buttons")
+        buttonLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        buttonLabel.textColor = .secondaryLabelColor
+
+        buttonXDotView = activityDotView(label: "X")
+        buttonCircleDotView = activityDotView(label: "O")
+        buttonSquareDotView = activityDotView(label: "□")
+        buttonTriangleDotView = activityDotView(label: "△")
+
+        buttonRow.addArrangedSubview(buttonLabel)
+        buttonRow.addArrangedSubview(buttonXDotView)
+        buttonRow.addArrangedSubview(buttonCircleDotView)
+        buttonRow.addArrangedSubview(buttonSquareDotView)
+        buttonRow.addArrangedSubview(buttonTriangleDotView)
+        buttonRow.addArrangedSubview(NSView()) // spacer
+
         // ---- Mode selector ----
         let modeLabel = NSTextField(labelWithString: "Mode")
         modeLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
@@ -177,6 +209,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         deltaLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         deltaLabel.textColor = .tertiaryLabelColor
 
+        // ---- Raw value readouts ----
+        gyroRateLabel = NSTextField(labelWithString: "Gyro: x:0.00 y:0.00 z:0.00")
+        gyroRateLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+        gyroRateLabel.textColor = .tertiaryLabelColor
+
+        touchpadLabel = NSTextField(labelWithString: "Touchpad: x:0.00 y:0.00")
+        touchpadLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+        touchpadLabel.textColor = .tertiaryLabelColor
+
         // ---- Assemble ----
         let container = NSView()
         container.wantsLayer = true
@@ -210,6 +251,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stack.addArrangedSubview(invertYCheckbox)
         stack.addArrangedSubview(NSView()) // spacer
         stack.addArrangedSubview(deltaLabel)
+        stack.addArrangedSubview(gyroRateLabel)
+        stack.addArrangedSubview(touchpadLabel)
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 400, height: 520),
@@ -326,6 +369,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Refresh activity indicators.
         updateActivityIndicators()
+        updateButtonIndicators()
+        updateRawValueReadouts()
         updateAccessibilityDot()
         refreshStatus()
     }
@@ -338,6 +383,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Live delta readout.
         let d = manager.lastMouseDelta
         deltaLabel.stringValue = String(format: "ΔX: %+.2f   ΔY: %+.2f", d.x, d.y)
+    }
+
+    private func updateButtonIndicators() {
+        setDotColor(buttonXDotView, active: manager.buttonXPressed)
+        setDotColor(buttonCircleDotView, active: manager.buttonCirclePressed)
+        setDotColor(buttonSquareDotView, active: manager.buttonSquarePressed)
+        setDotColor(buttonTriangleDotView, active: manager.buttonTrianglePressed)
+    }
+
+    private func updateRawValueReadouts() {
+        let g = manager.lastGyroRate
+        gyroRateLabel.stringValue = String(format: "Gyro: x:%+.3f y:%+.3f z:%+.3f", g.x, g.y, g.z)
+
+        let t = manager.lastTouchpadPosition
+        touchpadLabel.stringValue = String(format: "Touchpad: x:%+.2f y:%+.2f", t.x, t.y)
     }
 
     private func setDotColor(_ stack: NSStackView, active: Bool, activeColor: CGColor = NSColor.systemGreen.cgColor) {

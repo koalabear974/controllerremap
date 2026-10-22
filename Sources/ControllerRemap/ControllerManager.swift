@@ -34,6 +34,32 @@ final class ControllerManager {
     /// Last touchpad-derived delta (points).
     private(set) var lastTouchpadDelta: CGPoint = .zero
 
+    // MARK: - Button debug exposure
+
+    /// True if the X (cross) button is currently pressed.
+    private(set) var buttonXPressed = false
+    /// True if Circle button is currently pressed.
+    private(set) var buttonCirclePressed = false
+    /// True if Square button is currently pressed.
+    private(set) var buttonSquarePressed = false
+    /// True if Triangle button is currently pressed.
+    private(set) var buttonTrianglePressed = false
+
+    /// Last gyro rotation rate (radians/sec).
+    private(set) var lastGyroRate: SIMD3<Double> = .zero
+    /// Last touchpad position (0-1 range).
+    private(set) var lastTouchpadPosition: CGPoint = .zero
+
+    // MARK: - Debug logging
+
+    private var debugEnabled = true
+
+    private func debugLog(_ message: String) {
+        guard debugEnabled else { return }
+        let timestamp = String(format: "[%010.3f]", CACurrentMediaTime())
+        print("\(timestamp) ControllerRemap: \(message)")
+    }
+
     // MARK: - State
 
     private let mouseMover = MouseMover()
@@ -61,10 +87,22 @@ final class ControllerManager {
         lastGyroDelta = .zero
         lastTouchpadDelta = .zero
 
+        // Reset button states.
+        buttonXPressed = false
+        buttonCirclePressed = false
+        buttonSquarePressed = false
+        buttonTrianglePressed = false
+
         let now = CACurrentMediaTime()
         let controllers = GCController.controllers()
+        debugLog("tick: \(controllers.count) controller(s) connected")
+
         for controller in controllers {
             let id = ObjectIdentifier(controller)
+            debugLog("  controller: \(controller.vendorName ?? "Unknown")")
+
+            // Read buttons for debug (always, regardless of mode).
+            readButtons(controller)
 
             switch mode {
             case .off:
@@ -80,16 +118,65 @@ final class ControllerManager {
         }
     }
 
+    /// Reads face buttons for debug display.
+    /// PS4 mapping: Cross=A, Circle=B, Square=X, Triangle=Y
+    private func readButtons(_ controller: GCController) {
+        guard let extendedGamepad = controller.extendedGamepad else { return }
+
+        // Cross / X button -> buttonA.
+        if extendedGamepad.buttonA.isPressed {
+            buttonXPressed = true
+            debugLog("    buttonCross(A) PRESSED")
+        }
+        // Circle / O button -> buttonB.
+        if extendedGamepad.buttonB.isPressed {
+            buttonCirclePressed = true
+            debugLog("    buttonCircle(B) PRESSED")
+        }
+        // Square / □ button -> buttonX.
+        if extendedGamepad.buttonX.isPressed {
+            buttonSquarePressed = true
+            debugLog("    buttonSquare(X) PRESSED")
+        }
+        // Triangle / △ button -> buttonY.
+        if extendedGamepad.buttonY.isPressed {
+            buttonTrianglePressed = true
+            debugLog("    buttonTriangle(Y) PRESSED")
+        }
+    }
+
     // MARK: - Gyro -> mouse
 
     private func updateGyro(_ controller: GCController, stateKey: ObjectIdentifier, at now: CFTimeInterval) {
-        guard let motion = controller.motion else { return }
+        guard let motion = controller.motion else {
+            debugLog("    gyro: no motion available")
+            return
+        }
         motion.sensorsActive = true
-        guard motion.hasRotationRate else { return }
+        guard motion.hasRotationRate else {
+            debugLog("    gyro: hasRotationRate = false")
+            return
+        }
 
         let rate = motion.rotationRate
-        let dt = now - (gyroStates[stateKey]?.lastTime ?? now)
-        guard dt > 0 else { return }
+        lastGyroRate = SIMD3<Double>(rate.x, rate.y, rate.z)
+
+        var state = gyroStates[stateKey] ?? GyroState()
+        let dt = now - state.lastTime
+
+        // First tick: initialize state and wait for next frame.
+        if state.lastTime == 0 {
+            state.lastTime = now
+            gyroStates[stateKey] = state
+            debugLog("    gyro: first tick, initializing state")
+            return
+        }
+        guard dt > 0 else {
+            debugLog("    gyro: dt <= 0 (\(dt))")
+            return
+        }
+
+        debugLog("    gyro: rate=(x:\(String(format: "%.3f", rate.x)), y:\(String(format: "%.3f", rate.y)), z:\(String(format: "%.3f", rate.z))) dt=\(String(format: "%.4f", dt))")
 
         // Apply deadzone to rotation rate (radians/sec).
         var pitch = rate.x
@@ -113,11 +200,11 @@ final class ControllerManager {
             mouseMoved = true
             lastMouseDelta.x += dx
             lastMouseDelta.y += dy
+            debugLog("    gyro: MOVING dx=\(String(format: "%.2f", dx)) dy=\(String(format: "%.2f", dy))")
             mouseMover.moveBy(delta: delta)
         }
 
         // Store last time for next frame.
-        var state = gyroStates[stateKey] ?? GyroState()
         state.lastTime = now
         gyroStates[stateKey] = state
     }
@@ -125,18 +212,23 @@ final class ControllerManager {
     // MARK: - Touchpad -> mouse
 
     private func updateTouchpad(_ controller: GCController, stateKey: ObjectIdentifier) {
-        guard let extendedGamepad = controller.extendedGamepad else { return }
+        guard let extendedGamepad = controller.extendedGamepad else {
+            debugLog("    touchpad: no extendedGamepad")
+            return
+        }
 
         let touchpads = extendedGamepad.touchpads
         for (alias, touchpad) in touchpads {
             let axis = touchpad.touchSurface
             let x = axis.xAxis.value
             let y = axis.yAxis.value
-
-            var state = touchpadStates[stateKey]?[alias] ?? TouchpadState()
+            lastTouchpadPosition = CGPoint(x: CGFloat(x), y: CGFloat(y))
             let touchState = touchpad.touchState
 
+            debugLog("    touchpad[\(alias)]: state=\(touchState) x=\(String(format: "%.3f", x)) y=\(String(format: "%.3f", y))")
+
             if touchState == .moving || touchState == .down {
+                var state = touchpadStates[stateKey]?[alias] ?? TouchpadState()
                 var deltaX = CGFloat(x) - state.lastX
                 var deltaY = CGFloat(y) - state.lastY
                 state.lastX = CGFloat(x)
@@ -160,6 +252,7 @@ final class ControllerManager {
                     mouseMoved = true
                     lastMouseDelta.x += dx
                     lastMouseDelta.y += dy
+                    debugLog("    touchpad: MOVING dx=\(String(format: "%.2f", dx)) dy=\(String(format: "%.2f", dy))")
                     mouseMover.moveBy(delta: delta)
                 }
 
