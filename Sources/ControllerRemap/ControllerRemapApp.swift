@@ -203,6 +203,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         window.title = "Controller Remap"
+        window.titlebarAppearsTransparent = false
+        window.titleVisibility = .visible
+        window.backgroundColor = .windowBackgroundColor
         window.contentView = stack
         window.center()
         window.makeKeyAndOrderFront(nil)
