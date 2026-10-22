@@ -19,8 +19,8 @@ final class ControllerManager {
     var invertY: Bool = false
     var invertX: Bool = false
 
-    /// When true, gyro only moves mouse while X button is held down.
-    var gyroRequiresXButton: Bool = true
+    /// When true, gyro only moves mouse while touchpad is touched.
+    var gyroRequiresTouchpad: Bool = true
 
     // MARK: - Activity exposure
 
@@ -46,7 +46,7 @@ final class ControllerManager {
     private(set) var buttonDpadLeftPressed = false
     private(set) var buttonDpadRightPressed = false
     private(set) var buttonPSPressed = false
-    private(set) var buttonTouchpadPressed = false
+    private(set) var buttonTouchpadPressed = false  // Touchpad click (right mouse click)
     private(set) var buttonSharePressed = false
     private(set) var buttonOptionsPressed = false
 
@@ -71,18 +71,14 @@ final class ControllerManager {
 
     // Gyro integration state.
     private var lastGyroTimestamp: CFTimeInterval = 0
-    /// Center gyro reading captured when X button is first pressed.
-    /// All subsequent gyro readings are relative to this center.
+    /// Center gyro reading captured when touchpad is first touched.
     private var gyroCenterX: Double = 0
     private var gyroCenterY: Double = 0
     /// Whether we have a valid center reading.
     private var hasGyroCenter: Bool = false
-    /// Drift compensation: running average when gyro is stable.
-    /// Slowly absorbs drift so the cursor doesn't creep when controller is still.
+    /// Drift compensation running average.
     private var driftCompX: Double = 0
     private var driftCompY: Double = 0
-    private var driftSampleCount: Int = 0
-    /// Number of consecutive stable frames before auto-recentering.
     private var stableFrameCount: Int = 0
 
     // Touchpad state.
@@ -114,7 +110,6 @@ final class ControllerManager {
 
     // MARK: - Public
 
-    /// Called each frame (60 FPS) from the app's tick loop.
     func tick() {
         gyroActive = false
         touchpadActive = false
@@ -123,7 +118,7 @@ final class ControllerManager {
         lastGyroDelta = .zero
         lastTouchpadDelta = .zero
 
-        gyroActivelyRemapping = gyroRequiresXButton ? buttonXPressed : true
+        gyroActivelyRemapping = gyroRequiresTouchpad ? buttonTouchpadPressed : true
     }
 
     func onControllerConnectedChanged(_ callback: @escaping (Bool) -> Void) {
@@ -235,8 +230,8 @@ final class ControllerManager {
     // MARK: - Gyro accumulation
 
     private func accumulateGyro(report: DS4Report) {
-        // If gyro requires X button and X is not held, do not move mouse.
-        if gyroRequiresXButton && !buttonXPressed {
+        // If gyro requires touchpad touch and touchpad is not touched, do not move mouse.
+        if gyroRequiresTouchpad && !buttonTouchpadPressed {
             hasGyroCenter = false
             lastGyroTimestamp = 0
             gyroActivelyRemapping = false
@@ -251,7 +246,7 @@ final class ControllerManager {
 
         debugLog("    gyro: raw rate=(x:\(String(format: "%.1f", rateX)) y:\(String(format: "%.1f", rateY)) z:\(String(format: "%.1f", report.motion.gyroZ)))")
 
-        // Capture center gyro reading on first press of X button.
+        // Capture center gyro reading on first touchpad touch.
         if !hasGyroCenter {
             gyroCenterX = rateX
             gyroCenterY = rateY
@@ -283,11 +278,11 @@ final class ControllerManager {
         if isStable {
             stableFrameCount += 1
             // Slowly drift the center toward current reading (exponential moving average)
-            driftCompX = driftCompX * 0.95 + rateX * 0.05
-            driftCompY = driftCompY * 0.95 + rateY * 0.05
+            driftCompX = driftCompX * 0.98 + rateX * 0.02
+            driftCompY = driftCompY * 0.98 + rateY * 0.02
             driftSampleCount += 1
-            // Re-center every 30 stable frames (~0.5 seconds at 60Hz)
-            if stableFrameCount >= 30 {
+            // Re-center every 60 stable frames (~1 second at 60Hz)
+            if stableFrameCount >= 60 {
                 gyroCenterX = driftCompX
                 gyroCenterY = driftCompY
                 stableFrameCount = 0
@@ -341,6 +336,8 @@ final class ControllerManager {
         let y = report.touchpad.finger0Y
         let active = report.touchpad.finger0Active
 
+        debugLog("    touchpad: raw x=\(x) y=\(y) active=\(active)")
+
         guard active else {
             if touchpadActiveTracking {
                 touchpadActiveTracking = false
@@ -378,6 +375,8 @@ final class ControllerManager {
             mouseMoved = true
             lastMouseDelta.x += dx
             lastMouseDelta.y += dy
+
+            // Move mouse cursor immediately.
             mouseMover.moveBy(delta: CGPoint(x: dx, y: dy))
         }
     }

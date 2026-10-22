@@ -49,7 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var deadzoneSlider: NSSlider!
     private var invertYCheckbox: NSButton!
     private var invertXCheckbox: NSButton!
-    private var gyroRequiresXCheckbox: NSButton!
+    private var gyroRequiresTouchpadCheckbox: NSButton!
 
     // MARK: - App lifecycle
 
@@ -60,6 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildUI()
         print("ControllerRemap: buildUI done")
 
+        // Set up HID controller connection callback
         manager.onControllerConnectedChanged { [weak self] connected in
             self?.updateStatusDot(connected: connected)
         }
@@ -338,9 +339,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         invertXCheckbox = NSButton(checkboxWithTitle: "Invert X axis", target: nil, action: nil)
         invertXCheckbox.state = .off
 
-        // ---- Gyro requires X button ----
-        gyroRequiresXCheckbox = NSButton(checkboxWithTitle: "Gyro needs X button held", target: nil, action: nil)
-        gyroRequiresXCheckbox.state = .on
+        // ---- Gyro requires touchpad touch ----
+        gyroRequiresTouchpadCheckbox = NSButton(checkboxWithTitle: "Gyro needs touchpad touch", target: nil, action: nil)
+        gyroRequiresTouchpadCheckbox.state = .on
 
         // ---- Live delta readout ----
         deltaLabel = NSTextField(labelWithString: "ΔX: 0.0   ΔY: 0.0")
@@ -395,7 +396,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stack.addArrangedSubview(NSView())
         stack.addArrangedSubview(invertYCheckbox)
         stack.addArrangedSubview(invertXCheckbox)
-        stack.addArrangedSubview(gyroRequiresXCheckbox)
+        stack.addArrangedSubview(gyroRequiresTouchpadCheckbox)
         stack.addArrangedSubview(NSView())
         stack.addArrangedSubview(deltaLabel)
         stack.addArrangedSubview(gyroRateLabel)
@@ -516,7 +517,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager.deadzone = CGFloat(deadzoneSlider.doubleValue)
         manager.invertY = invertYCheckbox.state == .on
         manager.invertX = invertXCheckbox.state == .on
-        manager.gyroRequiresXButton = gyroRequiresXCheckbox.state == .on
+        manager.gyroRequiresTouchpad = gyroRequiresTouchpadCheckbox.state == .on
 
         sensValueLabel.stringValue = String(format: "%.1f×", sensitivitySlider.doubleValue)
 
@@ -556,15 +557,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let t = manager.lastTouchpadPosition
         touchpadLabel.stringValue = String(format: "Touchpad: x:%+.2f y:%+.2f", t.x, t.y)
 
-        // Gyro X-Y visualizer - only show movement when X button is held
-        if gyroRequiresXCheckbox.state == .on && !manager.buttonXPressed {
-            // Gyro not active - center the dot
+        // Gyro X-Y visualizer - only show movement when touchpad is touched
+        if gyroRequiresTouchpadCheckbox.state == .on && !manager.buttonTouchpadPressed {
+            // Touchpad not touched - center the dot
             gyroDotView.frame = CGRect(x: 55, y: 55, width: 10, height: 10)
         } else {
             let normX = max(-1, min(1, g.y / 4500))
             let normY = max(-1, min(1, g.x / 4500))
             let dotX = 55 + CGFloat(normX) * 50
-            let dotY = 55 - CGFloat(normY) * 50
+            let dotY = 55 - CGFloat(normY) * 50 // Y inverted for screen coords
             gyroDotView.frame = CGRect(x: dotX, y: dotY, width: 10, height: 10)
         }
 
