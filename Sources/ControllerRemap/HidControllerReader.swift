@@ -25,6 +25,17 @@ final class HidControllerReader {
 
     // Callbacks
     var onReport: ((DS4Report) -> Void)?
+    var onControllerConnected: ((Bool) -> Void)?
+
+    var isConnected = false {
+        didSet {
+            if isConnected != oldValue {
+                DispatchQueue.main.async {
+                    self.onControllerConnected?(self.isConnected)
+                }
+            }
+        }
+    }
 
     private var debugEnabled = true
 
@@ -105,6 +116,7 @@ final class HidControllerReader {
         if productID == kDS4ProductID_USB || productID == kDS4ProductID_BT {
             debugLog("  -> This is a DS4! Opening device…")
             self.device = device
+            isConnected = true
 
             let openResult = IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeSeizeDevice))
             debugLog("  -> IOHIDDeviceOpen result: \(openResult)")
@@ -151,6 +163,7 @@ final class HidControllerReader {
         if self.device == device {
             debugLog("DS4 device removed")
             self.device = nil
+            isConnected = false
         }
     }
 

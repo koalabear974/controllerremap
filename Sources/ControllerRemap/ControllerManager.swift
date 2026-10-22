@@ -4,9 +4,8 @@ import CoreGraphics
 /// Reads PS4 controller input via raw IOKit/HID reports and translates
 /// gyro / touchpad input into mouse movement.
 ///
-/// macOS's GameController framework does NOT expose PS4 gyro, face buttons,
-/// or touchpad data. We bypass it entirely and read raw HID input reports
-/// directly from the DualShock 4 over USB or Bluetooth.
+/// Uses IOKit/HID because macOS GameController framework does NOT expose
+/// PS4 gyro, face buttons, or touchpad data.
 final class ControllerManager {
     // MARK: - User settings
 
@@ -22,6 +21,11 @@ final class ControllerManager {
     var sensitivity: CGFloat = 1.0
     var deadzone: CGFloat = 0.05
     var invertY: Bool = false
+
+    // MARK: - Debug mode
+
+    /// When true, logs every HID byte and tracks changes for mapping verification.
+    var debugMode: Bool = true
 
     // MARK: - Activity exposure (for UI feedback)
 
@@ -65,28 +69,48 @@ final class ControllerManager {
     /// True if D-pad right is currently pressed.
     private(set) var buttonDpadRightPressed = false
 
-    /// Last gyro rotation rate (radians/sec equivalent).
+    /// True if PS button is pressed.
+    private(set) var buttonPSPressed = false
+    /// True if Touchpad click is pressed.
+    private(set) var buttonTouchpadPressed = false
+    /// True if Share button is pressed.
+    private(set) var buttonSharePressed = false
+    /// True if Options button is pressed.
+    private(set) var buttonOptionsPressed = false
+
+    /// Last gyro rotation rate (raw int16 values).
     private(set) var lastGyroRate: SIMD3<Double> = .zero
-    /// Last touchpad position (0-1 range).
+    /// Last touchpad position (normalized 0-1).
     private(set) var lastTouchpadPosition: CGPoint = .zero
+
+    // True if a DS4 controller is currently connected via HID.
+    var isControllerConnected: Bool {
+        hidReader.isConnected
+    }
+
+    // MARK: - Debug: byte change tracking
+
+    /// Last raw byte values for change detection.
+    private var lastRawBytes: [UInt8] = []
+    /// Whether debug mode has printed the button test instructions.
+    private var debugInstructionsPrinted = false
 
     // MARK: - State
 
     private let mouseMover = MouseMover()
     private let hidReader = HidControllerReader.shared
 
-    // Gyro integration state (per-controller).
+    // Gyro integration state.
     private var lastGyroTimestamp: CFTimeInterval = 0
 
     // Touchpad state.
     private var touchpadActiveTracking = false
+    private var previousTouchpadPosition: CGPoint = .zero
 
     // MARK: - Debug logging
 
-    private var debugEnabled = true
-
     private func debugLog(_ message: String) {
-        guard debugEnabled else { return }
+        guard debugMode else { return }
         let timestamp = String(format: "[%010.3f]", CFAbsoluteTimeGetCurrent())
         print("\(timestamp) ControllerRemap: \(message)")
     }
@@ -99,6 +123,7 @@ final class ControllerManager {
         }
         hidReader.start()
         debugLog("ControllerManager initialized, HID reader started")
+        debugLog("DEBUG MODE: Press each button when prompted to verify mapping")
     }
 
     deinit {
@@ -108,7 +133,6 @@ final class ControllerManager {
     // MARK: - Public
 
     /// Called each frame (60 FPS) from the app's tick loop.
-    /// Integrates accumulated gyro/touchpad deltas and moves the cursor.
     func tick() {
         // Reset per-frame activity flags.
         gyroActive = false
@@ -131,49 +155,119 @@ final class ControllerManager {
         }
     }
 
+    /// Set callback for controller connection/disconnection events.
+    func onControllerConnectedChanged(_ callback: @escaping (Bool) -> Void) {
+        hidReader.onControllerConnected = callback
+    }
+
     // MARK: - HID report handler
 
     private func handleDS4Report(_ report: DS4Report) {
+        // ---- Debug: log raw bytes on first few reports ----
+        if debugMode && lastRawBytes.isEmpty {
+            debugLog("=== FIRST REPORT RAW BYTES ===")
+            for (i, byte) in report.rawBytes.enumerated() {
+                debugLog("  byte[\(i)] = 0x\(String(byte, radix: 16).uppercased()) (\(byte))")
+            }
+            debugLog("=== END FIRST REPORT ===")
+            printDebugInstructions()
+        }
+
+        // ---- Debug: detect byte changes ----
+        if debugMode {
+            detectByteChanges(report.rawBytes)
+        }
+        lastRawBytes = report.rawBytes
+
         debugLog("DS4 report: buttons=cross=\(report.buttons.cross) circle=\(report.buttons.circle) square=\(report.buttons.square) triangle=\(report.buttons.triangle) L1=\(report.buttons.l1) R1=\(report.buttons.r1) L2=\(report.buttons.l2Button) R2=\(report.buttons.r2Button) dpad=(U:\(report.buttons.dpadUp) D:\(report.buttons.dpadDown) L:\(report.buttons.dpadLeft) R:\(report.buttons.dpadRight))")
 
         debugLog("DS4 motion: gyro=(x:\(String(format: "%.1f", report.motion.gyroX)) y:\(String(format: "%.1f", report.motion.gyroY)) z:\(String(format: "%.1f", report.motion.gyroZ))) accel=(x:\(String(format: "%.1f", report.motion.accelX)) y:\(String(format: "%.1f", report.motion.accelY)) z:\(String(format: "%.1f", report.motion.accelZ)))")
 
-        debugLog("DS4 touchpad: x=\(report.touchpad.finger0X) y=\(report.touchpad.finger0Y) active=\(report.touchpad.finger0Active)")
+        debugLog("DS4 touchpad: finger0 x=\(report.touchpad.finger0X) y=\(report.touchpad.finger0Y) active=\(report.touchpad.finger0Active)")
 
-        // Log raw touchpad bytes for debugging (bytes 27-35).
-        if report.rawBytes.count > 35 {
-            let tpBytes = report.rawBytes[27...35].map { String(format: "%02x", $0) }.joined(separator: " ")
-            debugLog("    touchpad raw bytes[27-35]: \(tpBytes)")
+        // ---- Update button states on main thread (UI updates) ----
+        DispatchQueue.main.async {
+            self.updateButtonState(name: "Cross(X)", pressed: report.buttons.cross, state: &self.buttonXPressed)
+            self.updateButtonState(name: "Circle(O)", pressed: report.buttons.circle, state: &self.buttonCirclePressed)
+            self.updateButtonState(name: "Square(□)", pressed: report.buttons.square, state: &self.buttonSquarePressed)
+            self.updateButtonState(name: "Triangle(△)", pressed: report.buttons.triangle, state: &self.buttonTrianglePressed)
+            self.updateButtonState(name: "L1", pressed: report.buttons.l1, state: &self.buttonL1Pressed)
+            self.updateButtonState(name: "R1", pressed: report.buttons.r1, state: &self.buttonR1Pressed)
+            self.updateButtonState(name: "L2", pressed: report.buttons.l2Button, state: &self.buttonL2Pressed)
+            self.updateButtonState(name: "R2", pressed: report.buttons.r2Button, state: &self.buttonR2Pressed)
+            self.updateButtonState(name: "PS", pressed: report.buttons.ps, state: &self.buttonPSPressed)
+            self.updateButtonState(name: "Touchpad Click", pressed: report.buttons.touchpadButton, state: &self.buttonTouchpadPressed)
+            self.updateButtonState(name: "Share", pressed: report.buttons.share, state: &self.buttonSharePressed)
+            self.updateButtonState(name: "Options", pressed: report.buttons.options, state: &self.buttonOptionsPressed)
+            self.updateButtonState(name: "D-pad Up", pressed: report.buttons.dpadUp, state: &self.buttonDpadUpPressed)
+            self.updateButtonState(name: "D-pad Down", pressed: report.buttons.dpadDown, state: &self.buttonDpadDownPressed)
+            self.updateButtonState(name: "D-pad Left", pressed: report.buttons.dpadLeft, state: &self.buttonDpadLeftPressed)
+            self.updateButtonState(name: "D-pad Right", pressed: report.buttons.dpadRight, state: &self.buttonDpadRightPressed)
+
+            // ---- Store latest gyro rate ----
+            self.lastGyroRate = SIMD3<Double>(report.motion.gyroX, report.motion.gyroY, report.motion.gyroZ)
+
+            // ---- Store latest touchpad position (normalize 0-1919, 0-942 to 0-1) ----
+            let tx = CGFloat(report.touchpad.finger0X) / 1919.0
+            let ty = CGFloat(report.touchpad.finger0Y) / 942.0
+            self.lastTouchpadPosition = CGPoint(x: tx, y: ty)
+
+            // ---- Accumulate gyro delta ----
+            if self.mode == .gyro || self.mode == .both {
+                self.accumulateGyro(report: report)
+            }
+
+            // ---- Accumulate touchpad delta ----
+            if self.mode == .touchpad || self.mode == .both {
+                self.accumulateTouchpad(report: report)
+            }
+        }
+    }
+
+    /// Prints instructions for the user to press each button to verify mapping.
+    private func printDebugInstructions() {
+        guard debugMode && !debugInstructionsPrinted else { return }
+        debugInstructionsPrinted = true
+
+        print("")
+        print("╔═══════════════════════════════════════════════════════════════╗")
+        print("║  DEBUG MODE: Button Mapping Verification                      ║")
+        print("╠═══════════════════════════════════════════════════════════════╣")
+        print("║  Press each button ONE AT A TIME when prompted.               ║")
+        print("║  Watch the console for byte changes.                          ║")
+        print("║                                                               ║")
+        print("║  1. Press Cross (X) button                                    ║")
+        print("║  2. Press Circle (O) button                                   ║")
+        print("║  3. Press Square (□) button                                   ║")
+        print("║  4. Press Triangle (△) button                                 ║")
+        print("║  5. Press L1 button                                           ║")
+        print("║  6. Press R1 button                                           ║")
+        print("║  7. Press Share button                                        ║")
+        print("║  8. Press Options button                                      ║")
+        print("║  9. Press D-pad Up                                            ║")
+        print("║  10. Touch the touchpad                                       ║")
+        print("║  11. Tilt the controller (gyro)                               ║")
+        print("║                                                               ║")
+        print("║  After each action, note which byte offset changed.           ║")
+        print("╚═══════════════════════════════════════════════════════════════╝")
+        print("")
+    }
+
+    /// Detects which bytes changed between reports and logs them.
+    private func detectByteChanges(_ newBytes: [UInt8]) {
+        guard lastRawBytes.count == newBytes.count else { return }
+
+        var changedBytes: [(offset: Int, old: UInt8, new: UInt8)] = []
+        for i in 0..<newBytes.count {
+            if newBytes[i] != lastRawBytes[i] {
+                changedBytes.append((i, lastRawBytes[i], newBytes[i]))
+            }
         }
 
-        // ---- Update button states ----
-        updateButtonState(name: "Cross(X)", pressed: report.buttons.cross, state: &buttonXPressed)
-        updateButtonState(name: "Circle(O)", pressed: report.buttons.circle, state: &buttonCirclePressed)
-        updateButtonState(name: "Square(□)", pressed: report.buttons.square, state: &buttonSquarePressed)
-        updateButtonState(name: "Triangle(△)", pressed: report.buttons.triangle, state: &buttonTrianglePressed)
-        updateButtonState(name: "L1", pressed: report.buttons.l1, state: &buttonL1Pressed)
-        updateButtonState(name: "R1", pressed: report.buttons.r1, state: &buttonR1Pressed)
-        updateButtonState(name: "L2", pressed: report.buttons.l2Button, state: &buttonL2Pressed)
-        updateButtonState(name: "R2", pressed: report.buttons.r2Button, state: &buttonR2Pressed)
-        updateButtonState(name: "D-pad Up", pressed: report.buttons.dpadUp, state: &buttonDpadUpPressed)
-        updateButtonState(name: "D-pad Down", pressed: report.buttons.dpadDown, state: &buttonDpadDownPressed)
-        updateButtonState(name: "D-pad Left", pressed: report.buttons.dpadLeft, state: &buttonDpadLeftPressed)
-        updateButtonState(name: "D-pad Right", pressed: report.buttons.dpadRight, state: &buttonDpadRightPressed)
-
-        // ---- Store latest gyro rate ----
-        lastGyroRate = SIMD3<Double>(report.motion.gyroX, report.motion.gyroY, report.motion.gyroZ)
-
-        // ---- Store latest touchpad position ----
-        lastTouchpadPosition = CGPoint(x: CGFloat(report.touchpad.finger0X), y: CGFloat(report.touchpad.finger0Y))
-
-        // ---- Accumulate gyro delta ----
-        if mode == .gyro || mode == .both {
-            accumulateGyro(report: report)
-        }
-
-        // ---- Accumulate touchpad delta ----
-        if mode == .touchpad || mode == .both {
-            accumulateTouchpad(report: report)
+        if !changedBytes.isEmpty {
+            let changes = changedBytes.map { "byte[\($0.offset)]: 0x\(String($0.old, radix: 16).uppercased()) → 0x\(String($0.new, radix: 16).uppercased())" }
+                .joined(separator: ", ")
+            debugLog("BYTE CHANGES: \(changes)")
         }
     }
 
@@ -194,9 +288,8 @@ final class ControllerManager {
         let now = CFAbsoluteTimeGetCurrent()
         let rateX = report.motion.gyroX
         let rateY = report.motion.gyroY
-        let rateZ = report.motion.gyroZ
 
-        debugLog("    gyro: raw rate=(x:\(String(format: "%.1f", rateX)) y:\(String(format: "%.1f", rateY)) z:\(String(format: "%.1f", rateZ)))")
+        debugLog("    gyro: raw rate=(x:\(String(format: "%.1f", rateX)) y:\(String(format: "%.1f", rateY)) z:\(String(format: "%.1f", report.motion.gyroZ)))")
 
         // Apply deadzone to raw gyro values.
         var x = rateX
@@ -205,7 +298,6 @@ final class ControllerManager {
         if abs(y) < Double(deadzone) { y = 0 }
 
         if x == 0 && y == 0 {
-            // No meaningful motion; just update timestamp.
             if lastGyroTimestamp == 0 {
                 lastGyroTimestamp = now
             }
@@ -222,15 +314,11 @@ final class ControllerManager {
         guard dt > 0 else { return }
         lastGyroTimestamp = now
 
-        // Convert gyro rate (degrees/sec) to pixels.
-        // DS4 gyro is typically in degrees/sec * 1000 (raw int16).
-        // Scale factor: divide raw by 1000 to get degrees/sec, then to pixels.
-        let degreesPerSecX = x / 1000.0
-        let degreesPerSecY = y / 1000.0
-
-        let pixelsPerDegree: CGFloat = 15.0
-        let dx = CGFloat(degreesPerSecY) * CGFloat(dt) * pixelsPerDegree * sensitivity
-        var dy = CGFloat(degreesPerSecX) * CGFloat(dt) * pixelsPerDegree * sensitivity
+        // Convert gyro rate (raw int16) to pixels.
+        // DS4 gyro raw values are typically in range ±4000+ per degree/sec.
+        let pixelsPerUnit: CGFloat = 0.1
+        let dx = CGFloat(rateY) * CGFloat(dt) * pixelsPerUnit * sensitivity
+        var dy = CGFloat(rateX) * CGFloat(dt) * pixelsPerUnit * sensitivity
 
         if invertY { dy = -dy }
 
@@ -263,33 +351,36 @@ final class ControllerManager {
         debugLog("    touchpad: raw x=\(x) y=\(y) active=\(active)")
 
         guard active else {
-            // Touchpad released; reset tracking.
             if touchpadActiveTracking {
                 touchpadActiveTracking = false
-                lastTouchpadPosition = .zero
+                previousTouchpadPosition = .zero
                 debugLog("    touchpad: released")
             }
             return
         }
 
+        // Normalize to 0-1 range.
+        let currentPos = CGPoint(
+            x: CGFloat(x) / 1919.0,
+            y: CGFloat(y) / 942.0
+        )
+
         if !touchpadActiveTracking {
-            // First touch: initialize position, wait for next frame.
             touchpadActiveTracking = true
-            lastTouchpadPosition = CGPoint(x: CGFloat(x), y: CGFloat(y))
+            previousTouchpadPosition = currentPos
             debugLog("    touchpad: first touch, initializing")
             return
         }
 
-        let currentPos = CGPoint(x: CGFloat(x), y: CGFloat(y))
-        var deltaX = currentPos.x - lastTouchpadPosition.x
-        var deltaY = currentPos.y - lastTouchpadPosition.y
-        lastTouchpadPosition = currentPos
+        var deltaX = currentPos.x - previousTouchpadPosition.x
+        var deltaY = currentPos.y - previousTouchpadPosition.y
+        previousTouchpadPosition = currentPos
 
         // Apply deadzone.
         if abs(deltaX) < deadzone { deltaX = 0 }
         if abs(deltaY) < deadzone { deltaY = 0 }
 
-        let pixelsPerUnit: CGFloat = 5.0
+        let pixelsPerUnit: CGFloat = 500.0
         let dx = deltaX * pixelsPerUnit * sensitivity
         var dy = deltaY * pixelsPerUnit * sensitivity
 

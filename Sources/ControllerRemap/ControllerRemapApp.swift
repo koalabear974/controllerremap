@@ -1,5 +1,4 @@
 import AppKit
-import GameController
 import ApplicationServices
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -18,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var a11yButton: NSButton!
 
     // Input activity
-    private var gyroDotView: NSStackView!
+    private var gyroActivityDotView: NSStackView!
     private var touchpadDotView: NSStackView!
     private var mouseDotView: NSStackView!
     private var deltaLabel: NSTextField!
@@ -32,8 +31,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Big X button press indicator
     private var xPressedLabel: NSTextField!
 
-    // Gyro X-Y visualizer
-    private var gyroVisualizerView: GyroVisualizerView!
+    // Gyro X-Y visualizer (simple subviews, no custom draw)
+    private var gyroVisualizerContainer: NSView!
+    private var gyroDotView: NSView!
+    private var gyroHLine: NSView!
+    private var gyroVLine: NSView!
 
     // Raw value readouts
     private var gyroRateLabel: NSTextField!
@@ -54,23 +56,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildUI()
         print("ControllerRemap: buildUI done")
 
-        Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-            self?.tick()
+        // Set up HID controller connection callback
+        manager.onControllerConnectedChanged { [weak self] connected in
+            self?.updateStatusDot(connected: connected)
         }
 
-        NotificationCenter.default.addObserver(
-            forName: NSNotification.Name("GCControllerDidConnectNotification"),
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            self?.refreshStatus()
-        }
-        NotificationCenter.default.addObserver(
-            forName: NSNotification.Name("GCControllerDidDisconnectNotification"),
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            self?.refreshStatus()
+        Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+            self?.tick()
         }
 
         refreshStatus()
@@ -143,12 +135,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         activityLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
         activityLabel.textColor = .secondaryLabelColor
 
-        gyroDotView = activityDotView(label: "Gyro")
+        gyroActivityDotView = activityDotView(label: "Gyro")
         touchpadDotView = activityDotView(label: "Touchpad")
         mouseDotView = activityDotView(label: "Mouse")
 
         activityRow.addArrangedSubview(activityLabel)
-        activityRow.addArrangedSubview(gyroDotView)
+        activityRow.addArrangedSubview(gyroActivityDotView)
         activityRow.addArrangedSubview(touchpadDotView)
         activityRow.addArrangedSubview(mouseDotView)
         activityRow.addArrangedSubview(NSView()) // spacer
@@ -195,10 +187,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         xRow.addArrangedSubview(NSView()) // spacer
 
         // ---- Gyro X-Y visualizer ----
-        gyroVisualizerView = GyroVisualizerView()
-        gyroVisualizerView.translatesAutoresizingMaskIntoConstraints = false
-        gyroVisualizerView.heightAnchor.constraint(equalToConstant: 120).isActive = true
-        gyroVisualizerView.widthAnchor.constraint(equalToConstant: 120).isActive = true
+        gyroVisualizerContainer = NSView()
+        gyroVisualizerContainer.wantsLayer = true
+        gyroVisualizerContainer.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        gyroVisualizerContainer.layer?.cornerRadius = 6
+        gyroVisualizerContainer.layer?.borderColor = NSColor.separatorColor.cgColor
+        gyroVisualizerContainer.layer?.borderWidth = 1
+        gyroVisualizerContainer.translatesAutoresizingMaskIntoConstraints = false
+        gyroVisualizerContainer.heightAnchor.constraint(equalToConstant: 120).isActive = true
+        gyroVisualizerContainer.widthAnchor.constraint(equalToConstant: 120).isActive = true
+
+        // Crosshair lines
+        gyroHLine = NSView()
+        gyroHLine.wantsLayer = true
+        gyroHLine.layer?.backgroundColor = NSColor.separatorColor.cgColor
+        gyroHLine.translatesAutoresizingMaskIntoConstraints = false
+        gyroHLine.heightAnchor.constraint(equalToConstant: 2).isActive = true
+        gyroHLine.widthAnchor.constraint(equalToConstant: 120).isActive = true
+
+        gyroVLine = NSView()
+        gyroVLine.wantsLayer = true
+        gyroVLine.layer?.backgroundColor = NSColor.separatorColor.cgColor
+        gyroVLine.translatesAutoresizingMaskIntoConstraints = false
+        gyroVLine.widthAnchor.constraint(equalToConstant: 2).isActive = true
+        gyroVLine.heightAnchor.constraint(equalToConstant: 120).isActive = true
+
+        // Gyro dot
+        gyroDotView = NSView()
+        gyroDotView.wantsLayer = true
+        gyroDotView.layer?.backgroundColor = NSColor.systemBlue.cgColor
+        gyroDotView.layer?.cornerRadius = 5
+        gyroDotView.translatesAutoresizingMaskIntoConstraints = false
+        gyroDotView.widthAnchor.constraint(equalToConstant: 10).isActive = true
+        gyroDotView.heightAnchor.constraint(equalToConstant: 10).isActive = true
+
+        gyroVisualizerContainer.addSubview(gyroHLine)
+        gyroVisualizerContainer.addSubview(gyroVLine)
+        gyroVisualizerContainer.addSubview(gyroDotView)
+
+        // Center the crosshair and dot initially
+        NSLayoutConstraint.activate([
+            gyroHLine.centerXAnchor.constraint(equalTo: gyroVisualizerContainer.centerXAnchor),
+            gyroHLine.centerYAnchor.constraint(equalTo: gyroVisualizerContainer.centerYAnchor),
+            gyroVLine.centerXAnchor.constraint(equalTo: gyroVisualizerContainer.centerXAnchor),
+            gyroVLine.centerYAnchor.constraint(equalTo: gyroVisualizerContainer.centerYAnchor),
+            gyroDotView.centerXAnchor.constraint(equalTo: gyroVisualizerContainer.centerXAnchor),
+            gyroDotView.centerYAnchor.constraint(equalTo: gyroVisualizerContainer.centerYAnchor),
+        ])
+
+        // ---- Mode selector ----
         let modeLabel = NSTextField(labelWithString: "Mode")
         modeLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
         modeLabel.textColor = .secondaryLabelColor
@@ -271,7 +308,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stack.addArrangedSubview(buttonRow)
         stack.addArrangedSubview(xRow)
         stack.addArrangedSubview(NSView()) // spacer
-        stack.addArrangedSubview(gyroVisualizerView)
+        stack.addArrangedSubview(gyroVisualizerContainer)
         stack.addArrangedSubview(NSView()) // spacer
         stack.addArrangedSubview(modeLabel)
         stack.addArrangedSubview(modeSegment)
@@ -289,7 +326,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stack.addArrangedSubview(touchpadLabel)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 700),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -307,7 +344,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         print("Window created: \(String(describing: window)), isVisible: \(window.isVisible)")
     }
 
-    /// Builds an activity indicator stack: [dot][label]. Returns the stack; the caller keeps a reference to `dot`.
+    /// Builds an activity indicator stack: [dot][label].
     private func activityDotView(label: String) -> NSStackView {
         let row = NSStackView()
         row.orientation = .horizontal
@@ -334,13 +371,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Status
 
     private func refreshStatus() {
-        let controllers = GCController.controllers()
-        let connected = !controllers.isEmpty
+        let connected = manager.isControllerConnected
         updateStatusDot(connected: connected)
 
         if connected {
-            let names = controllers.map { $0.vendorName ?? "Controller" }
-            statusLabel.stringValue = names.joined(separator: ", ")
+            statusLabel.stringValue = "DUALSHOCK 4 Wireless Controller"
             statusLabel.textColor = .labelColor
         } else {
             statusLabel.stringValue = "No controller connected"
@@ -410,7 +445,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateActivityIndicators() {
-        setDotColor(gyroDotView, active: manager.gyroActive)
+        setDotColor(gyroActivityDotView, active: manager.gyroActive)
         setDotColor(touchpadDotView, active: manager.touchpadActive)
         setDotColor(mouseDotView, active: manager.mouseMoved, activeColor: NSColor.systemBlue.cgColor)
 
@@ -441,80 +476,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let t = manager.lastTouchpadPosition
         touchpadLabel.stringValue = String(format: "Touchpad: x:%+.2f y:%+.2f", t.x, t.y)
 
-        // Update gyro X-Y visualizer.
-        gyroVisualizerView.gyroX = g.x
-        gyroVisualizerView.gyroY = g.y
+        // Update gyro X-Y visualizer dot position.
+        // Normalize gyro values (±2000 range) to fit in 120x120 view (center at 60,60).
+        let normX = max(-1, min(1, g.x / 2000))
+        let normY = max(-1, min(1, g.y / 2000))
+        let dotX = 55 + CGFloat(normX) * 50
+        let dotY = 55 - CGFloat(normY) * 50 // Y inverted for screen coords
+        gyroDotView.frame = CGRect(x: dotX, y: dotY, width: 10, height: 10)
     }
 
     private func setDotColor(_ stack: NSStackView, active: Bool, activeColor: CGColor = NSColor.systemGreen.cgColor) {
         guard let dot = stack.arrangedSubviews.first else { return }
         dot.layer?.backgroundColor = active ? activeColor : NSColor.systemGray.cgColor
-    }
-}
-
-/// Visualizer showing gyro X-Y as a moving dot on a crosshair.
-/// Gyro values (int16 range) are normalized to fit within the view bounds.
-final class GyroVisualizerView: NSView {
-    var gyroX: Double = 0 {
-        didSet { needsDisplay = true }
-    }
-    var gyroY: Double = 0 {
-        didSet { needsDisplay = true }
-    }
-
-    // Normalization: typical DS4 gyro range is roughly ±1000 deg/sec * 1000 raw units.
-    // We'll normalize to ±2000 for comfortable display.
-    private let normalizeRange: Double = 2000
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        wantsLayer = true
-        layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-        layer?.cornerRadius = 6
-        layer?.borderColor = NSColor.separatorColor.cgColor
-        layer?.borderWidth = 1
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        wantsLayer = true
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        guard bounds.width > 0, bounds.height > 0 else { return }
-        super.draw(dirtyRect)
-
-        guard let context = NSGraphicsContext.current?.cgContext else { return }
-
-        let width = bounds.width
-        let height = bounds.height
-        let centerX = width / 2
-        let centerY = height / 2
-
-        // Draw crosshair.
-        context.setStrokeColor(NSColor.separatorColor.cgColor)
-        context.setLineWidth(1)
-        context.move(to: CGPoint(x: centerX, y: 4))
-        context.addLine(to: CGPoint(x: centerX, y: height - 4))
-        context.move(to: CGPoint(x: 4, y: centerY))
-        context.addLine(to: CGPoint(x: width - 4, y: centerY))
-        context.strokePath()
-
-        // Normalize gyro values to view coordinates.
-        let normX = max(-1, min(1, gyroX / normalizeRange))
-        let normY = max(-1, min(1, gyroY / normalizeRange))
-
-        let dotX = centerX + CGFloat(normX) * (width / 2 - 8)
-        let dotY = centerY - CGFloat(normY) * (height / 2 - 8) // Y inverted for screen coords
-
-        // Draw dot.
-        let dotSize: CGFloat = 10
-        context.setFillColor(NSColor.systemBlue.cgColor)
-        context.fillEllipse(in: CGRect(
-            x: dotX - dotSize / 2,
-            y: dotY - dotSize / 2,
-            width: dotSize,
-            height: dotSize
-        ))
     }
 }
