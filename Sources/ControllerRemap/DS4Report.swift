@@ -186,7 +186,15 @@ struct DS4Report {
 
     private static func parseTouchpadReport0x11(_ data: Data) -> DS4TouchData {
         var t = DS4TouchData()
-        // Touchpad data location in 78-byte report is TBD; leave zeros for now
+        guard data.count >= 29 else { return t }
+
+        // DS4 Bluetooth report 0x11: touchpad finger 0 data at bytes 27-28.
+        // Byte 27: X position (0-255)
+        // Byte 28: Y position (0-255), bit 7 = touch active flag
+        t.finger0X = data[27]
+        t.finger0Y = data[28]
+        t.finger0Active = (data[28] & 0x80) != 0
+
         return t
     }
 

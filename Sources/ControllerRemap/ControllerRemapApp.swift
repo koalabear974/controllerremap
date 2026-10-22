@@ -29,6 +29,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var buttonSquareDotView: NSStackView!
     private var buttonTriangleDotView: NSStackView!
 
+    // Big X button press indicator
+    private var xPressedLabel: NSTextField!
+
+    // Gyro X-Y visualizer
+    private var gyroVisualizerView: GyroVisualizerView!
+
     // Raw value readouts
     private var gyroRateLabel: NSTextField!
     private var touchpadLabel: NSTextField!
@@ -169,7 +175,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buttonRow.addArrangedSubview(buttonTriangleDotView)
         buttonRow.addArrangedSubview(NSView()) // spacer
 
-        // ---- Mode selector ----
+        // ---- Big X button press indicator ----
+        let xRow = NSStackView()
+        xRow.orientation = .horizontal
+        xRow.spacing = 8
+        xRow.alignment = .centerY
+
+        let xLabel = NSTextField(labelWithString: "X button:")
+        xLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        xLabel.textColor = .secondaryLabelColor
+
+        xPressedLabel = NSTextField(labelWithString: "X PRESSED")
+        xPressedLabel.font = NSFont.boldSystemFont(ofSize: 14)
+        xPressedLabel.textColor = .systemGray
+        xPressedLabel.alignment = .center
+
+        xRow.addArrangedSubview(xLabel)
+        xRow.addArrangedSubview(xPressedLabel)
+        xRow.addArrangedSubview(NSView()) // spacer
+
+        // ---- Gyro X-Y visualizer ----
+        gyroVisualizerView = GyroVisualizerView()
+        gyroVisualizerView.translatesAutoresizingMaskIntoConstraints = false
+        gyroVisualizerView.heightAnchor.constraint(equalToConstant: 120).isActive = true
+        gyroVisualizerView.widthAnchor.constraint(equalToConstant: 120).isActive = true
         let modeLabel = NSTextField(labelWithString: "Mode")
         modeLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
         modeLabel.textColor = .secondaryLabelColor
@@ -238,6 +267,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stack.addArrangedSubview(a11yRow)
         stack.addArrangedSubview(NSView()) // spacer
         stack.addArrangedSubview(activityRow)
+        stack.addArrangedSubview(NSView()) // spacer
+        stack.addArrangedSubview(buttonRow)
+        stack.addArrangedSubview(xRow)
+        stack.addArrangedSubview(NSView()) // spacer
+        stack.addArrangedSubview(gyroVisualizerView)
         stack.addArrangedSubview(NSView()) // spacer
         stack.addArrangedSubview(modeLabel)
         stack.addArrangedSubview(modeSegment)
@@ -390,6 +424,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setDotColor(buttonCircleDotView, active: manager.buttonCirclePressed)
         setDotColor(buttonSquareDotView, active: manager.buttonSquarePressed)
         setDotColor(buttonTriangleDotView, active: manager.buttonTrianglePressed)
+
+        // Big X button press indicator.
+        xPressedLabel.textColor = manager.buttonXPressed
+            ? NSColor.systemGreen
+            : NSColor.systemGray
+        xPressedLabel.stringValue = manager.buttonXPressed
+            ? "X PRESSED"
+            : "X released"
     }
 
     private func updateRawValueReadouts() {
@@ -398,10 +440,80 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let t = manager.lastTouchpadPosition
         touchpadLabel.stringValue = String(format: "Touchpad: x:%+.2f y:%+.2f", t.x, t.y)
+
+        // Update gyro X-Y visualizer.
+        gyroVisualizerView.gyroX = g.x
+        gyroVisualizerView.gyroY = g.y
     }
 
     private func setDotColor(_ stack: NSStackView, active: Bool, activeColor: CGColor = NSColor.systemGreen.cgColor) {
         guard let dot = stack.arrangedSubviews.first else { return }
         dot.layer?.backgroundColor = active ? activeColor : NSColor.systemGray.cgColor
+    }
+}
+
+/// Visualizer showing gyro X-Y as a moving dot on a crosshair.
+/// Gyro values (int16 range) are normalized to fit within the view bounds.
+final class GyroVisualizerView: NSView {
+    var gyroX: Double = 0 {
+        didSet { needsDisplay = true }
+    }
+    var gyroY: Double = 0 {
+        didSet { needsDisplay = true }
+    }
+
+    // Normalization: typical DS4 gyro range is roughly ±1000 deg/sec * 1000 raw units.
+    // We'll normalize to ±2000 for comfortable display.
+    private let normalizeRange: Double = 2000
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        layer?.cornerRadius = 6
+        layer?.borderColor = NSColor.separatorColor.cgColor
+        layer?.borderWidth = 1
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        wantsLayer = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+
+        let width = bounds.width
+        let height = bounds.height
+        let centerX = width / 2
+        let centerY = height / 2
+
+        // Draw crosshair.
+        context.setStrokeColor(NSColor.separatorColor.cgColor)
+        context.setLineWidth(1)
+        context.move(to: CGPoint(x: centerX, y: 4))
+        context.addLine(to: CGPoint(x: centerX, y: height - 4))
+        context.move(to: CGPoint(x: 4, y: centerY))
+        context.addLine(to: CGPoint(x: width - 4, y: centerY))
+        context.strokePath()
+
+        // Normalize gyro values to view coordinates.
+        let normX = max(-1, min(1, gyroX / normalizeRange))
+        let normY = max(-1, min(1, gyroY / normalizeRange))
+
+        let dotX = centerX + CGFloat(normX) * (width / 2 - 8)
+        let dotY = centerY - CGFloat(normY) * (height / 2 - 8) // Y inverted for screen coords
+
+        // Draw dot.
+        let dotSize: CGFloat = 10
+        context.setFillColor(NSColor.systemBlue.cgColor)
+        context.fillEllipse(in: CGRect(
+            x: dotX - dotSize / 2,
+            y: dotY - dotSize / 2,
+            width: dotSize,
+            height: dotSize
+        ))
     }
 }

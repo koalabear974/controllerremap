@@ -140,6 +140,12 @@ final class ControllerManager {
 
         debugLog("DS4 touchpad: x=\(report.touchpad.finger0X) y=\(report.touchpad.finger0Y) active=\(report.touchpad.finger0Active)")
 
+        // Log raw touchpad bytes for debugging (bytes 27-35).
+        if report.rawBytes.count > 35 {
+            let tpBytes = report.rawBytes[27...35].map { String(format: "%02x", $0) }.joined(separator: " ")
+            debugLog("    touchpad raw bytes[27-35]: \(tpBytes)")
+        }
+
         // ---- Update button states ----
         updateButtonState(name: "Cross(X)", pressed: report.buttons.cross, state: &buttonXPressed)
         updateButtonState(name: "Circle(O)", pressed: report.buttons.circle, state: &buttonCirclePressed)
@@ -207,12 +213,13 @@ final class ControllerManager {
         }
 
         let dt = now - lastGyroTimestamp
-        guard dt > 0 else {
-            if lastGyroTimestamp == 0 {
-                lastGyroTimestamp = now
-            }
+
+        // First report: initialize timestamp and wait for next frame.
+        if lastGyroTimestamp == 0 {
+            lastGyroTimestamp = now
             return
         }
+        guard dt > 0 else { return }
         lastGyroTimestamp = now
 
         // Convert gyro rate (degrees/sec) to pixels.
