@@ -54,6 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var deadzoneSlider: NSSlider!
     private var invertYCheckbox: NSButton!
     private var invertXCheckbox: NSButton!
+    private var gyroRequiresXCheckbox: NSButton!
 
     // MARK: - App lifecycle
 
@@ -335,6 +336,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         invertXCheckbox = NSButton(checkboxWithTitle: "Invert X axis", target: nil, action: nil)
         invertXCheckbox.state = .off
 
+        // ---- Gyro requires X button ----
+        gyroRequiresXCheckbox = NSButton(checkboxWithTitle: "Gyro needs X button held", target: nil, action: nil)
+        gyroRequiresXCheckbox.state = .on
+
         // ---- Live delta readout ----
         deltaLabel = NSTextField(labelWithString: "ΔX: 0.0   ΔY: 0.0")
         deltaLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
@@ -389,6 +394,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stack.addArrangedSubview(NSView()) // spacer
         stack.addArrangedSubview(invertYCheckbox)
         stack.addArrangedSubview(invertXCheckbox)
+        stack.addArrangedSubview(gyroRequiresXCheckbox)
         stack.addArrangedSubview(NSView()) // spacer
         stack.addArrangedSubview(deltaLabel)
         stack.addArrangedSubview(gyroRateLabel)
@@ -505,6 +511,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager.deadzone = CGFloat(deadzoneSlider.doubleValue)
         manager.invertY = invertYCheckbox.state == .on
         manager.invertX = invertXCheckbox.state == .on
+        manager.gyroRequiresXButton = gyroRequiresXCheckbox.state == .on
 
         // Refresh activity indicators.
         updateActivityIndicators()

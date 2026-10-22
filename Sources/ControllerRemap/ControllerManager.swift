@@ -23,10 +23,8 @@ final class ControllerManager {
     var invertY: Bool = false
     var invertX: Bool = false
 
-    // MARK: - Debug mode
-
-    /// When true, logs every HID byte and tracks changes for mapping verification.
-    var debugMode: Bool = true
+    /// When true, gyro only moves mouse while X button is held down.
+    var gyroRequiresXButton: Bool = true
 
     // MARK: - Activity exposure (for UI feedback)
 
@@ -75,7 +73,8 @@ final class ControllerManager {
     /// True if Touchpad click is pressed.
     private(set) var buttonTouchpadPressed = false
     /// True if Share button is pressed.
-    private(set) var buttonSharePressed = false    /// True if Options button is pressed.
+    private(set) var buttonSharePressed = false
+    /// True if Options button is pressed.
     private(set) var buttonOptionsPressed = false
 
     /// Last gyro rotation rate (raw int16 values).
@@ -87,6 +86,16 @@ final class ControllerManager {
     var isControllerConnected: Bool {
         hidReader.isConnected
     }
+
+    // MARK: - Gyro hold-to-enable state
+
+    /// True when X button is held AND gyro mode is active (used by UI).
+    private(set) var gyroActivelyRemapping: Bool = false
+
+    // MARK: - Debug mode
+
+    /// When true, logs every HID byte and tracks changes for mapping verification.
+    var debugMode: Bool = true
 
     // MARK: - Debug: byte change tracking
 
@@ -102,6 +111,12 @@ final class ControllerManager {
 
     // Gyro integration state.
     private var lastGyroTimestamp: CFTimeInterval = 0
+    /// Center gyro reading captured when X button is first pressed.
+    /// All subsequent gyro readings are relative to this center.
+    private var gyroCenterX: Double = 0
+    private var gyroCenterY: Double = 0
+    /// Whether we have a valid center reading (X button is currently held).
+    private var hasGyroCenter: Bool = false
 
     // Touchpad state.
     private var touchpadActiveTracking = false
@@ -142,12 +157,8 @@ final class ControllerManager {
         lastGyroDelta = .zero
         lastTouchpadDelta = .zero
 
-        let now = CFAbsoluteTimeGetCurrent()
-
-        // Gyro and touchpad input is processed directly in the HID callback
-        // (handleDS4Report → accumulateGyro / accumulateTouchpad) where we
-        // have the actual delta values. This avoids a race condition where
-        // tick() could read stale/zero deltas.
+        // Update gyro active state based on X button hold.
+        gyroActivelyRemapped = gyroRequiresXButton ? buttonXPressed : true
     }
 
     /// Set callback for controller connection/disconnection events.
@@ -180,6 +191,12 @@ final class ControllerManager {
 
         debugLog("DS4 touchpad: finger0 x=\(report.touchpad.finger0X) y=\(report.touchpad.finger0Y) active=\(report.touchpad.finger0Active)")
 
+        // Log raw touchpad bytes for debugging (bytes 27-35).
+        if report.rawBytes.count > 35 {
+            let tpBytes = report.rawBytes[27...35].map { String(format: "%02x", $0) }.joined(separator: " ")
+            debugLog("    touchpad raw bytes[27-35]: \(tpBytes)")
+        }
+
         // ---- Update button states on main thread (UI updates) ----
         DispatchQueue.main.async {
             self.updateButtonState(name: "Cross(X)", pressed: report.buttons.cross, state: &self.buttonXPressed)
@@ -207,12 +224,12 @@ final class ControllerManager {
             let ty = CGFloat(report.touchpad.finger0Y) / 942.0
             self.lastTouchpadPosition = CGPoint(x: tx, y: ty)
 
-            // ---- Accumulate gyro delta ----
+            // ---- Accumulate gyro delta AND move mouse ----
             if self.mode == .gyro || self.mode == .both {
                 self.accumulateGyro(report: report)
             }
 
-            // ---- Accumulate touchpad delta ----
+            // ---- Accumulate touchpad delta AND move mouse ----
             if self.mode == .touchpad || self.mode == .both {
                 self.accumulateTouchpad(report: report)
             }
@@ -280,44 +297,63 @@ final class ControllerManager {
     // MARK: - Gyro accumulation (called from HID callback)
 
     private func accumulateGyro(report: DS4Report) {
+        // If gyro requires X button and X is not held, do not move mouse.
+        // Reset center so next X-press starts fresh.
+        if gyroRequiresXButton && !buttonXPressed {
+            hasGyroCenter = false
+            lastGyroTimestamp = 0
+            gyroActivelyRemapped = false
+            return
+        }
+
+        gyroActivelyRemapped = true
+
         let now = CFAbsoluteTimeGetCurrent()
         let rateX = report.motion.gyroX
         let rateY = report.motion.gyroY
 
         debugLog("    gyro: raw rate=(x:\(String(format: "%.1f", rateX)) y:\(String(format: "%.1f", rateY)) z:\(String(format: "%.1f", report.motion.gyroZ)))")
 
-        // Apply deadzone to raw gyro values.
-        var x = rateX
-        var y = rateY
-        if abs(x) < Double(deadzone) { x = 0 }
-        if abs(y) < Double(deadzone) { y = 0 }
+        // Capture center gyro reading on first press of X button.
+        if !hasGyroCenter {
+            gyroCenterX = rateX
+            gyroCenterY = rateY
+            lastGyroTimestamp = now
+            hasGyroCenter = true
+            debugLog("    gyro: center captured at X=\(rateX) Y=\(rateY)")
+            return
+        }
+
+        // Calculate delta from center gyro reading.
+        let deltaX = rateX - gyroCenterX
+        let deltaY = rateY - gyroCenterY
+
+        // Apply deadzone to raw gyro deltas.
+        // Raw gyro values are in range ±4000+, so deadzone needs to be substantial.
+        let gyroDeadzone = Double(deadzone) * 50.0  // Scale deadzone for raw gyro units
+        var x = deltaX
+        var y = deltaY
+        if abs(x) < gyroDeadzone { x = 0 }
+        if abs(y) < gyroDeadzone { y = 0 }
 
         if x == 0 && y == 0 {
-            if lastGyroTimestamp == 0 {
-                lastGyroTimestamp = now
-            }
             return
         }
 
         let dt = now - lastGyroTimestamp
-
-        // First report: initialize timestamp and wait for next frame.
-        if lastGyroTimestamp == 0 {
-            lastGyroTimestamp = now
-            return
-        }
         guard dt > 0 else { return }
         lastGyroTimestamp = now
 
-        // Convert gyro rate (raw int16) to pixels.
+        // Convert gyro rate delta (raw int16 units) to pixels.
         // DS4 gyro raw values are typically in range ±4000+ per degree/sec.
-        let pixelsPerUnit: CGFloat = 0.1
-        var dx = CGFloat(rateY) * CGFloat(dt) * pixelsPerUnit * sensitivity
-        var dy = CGFloat(rateX) * CGFloat(dt) * pixelsPerUnit * sensitivity
+        // We scale down significantly so small tilts move cursor reasonably.
+        let pixelsPerUnit: CGFloat = 0.02
+        var dx = CGFloat(y) * CGFloat(dt) * pixelsPerUnit * sensitivity
+        var dy = CGFloat(x) * CGFloat(dt) * pixelsPerUnit * sensitivity
 
         // Apply axis inversion (gyro only).
-        if invertX { dx = -dx; debugLog("    gyro: INVERT X applied") }
-        if invertY { dy = -dy; debugLog("    gyro: INVERT Y applied") }
+        if invertX { dx = -dx }
+        if invertY { dy = -dy }
 
         lastGyroDelta = CGPoint(x: dx, y: dy)
 
@@ -326,7 +362,7 @@ final class ControllerManager {
             mouseMoved = true
             lastMouseDelta.x += dx
             lastMouseDelta.y += dy
-            debugLog("    gyro: MOVING dx=\(String(format: "%.2f", dx)) dy=\(String(format: "%.2f", dy)) dt=\(String(format: "%.4f", dt))")
+            debugLog("    gyro: MOVING dx=\(String(format: "%.2f", dx)) dy=\(String(format: "%.2f", dy)) dt=\(String(format: "%.4f", dt)) centerX=\(gyroCenterX) centerY=\(gyroCenterY)")
 
             // Move mouse cursor immediately.
             mouseMover.moveBy(delta: CGPoint(x: dx, y: dy))
