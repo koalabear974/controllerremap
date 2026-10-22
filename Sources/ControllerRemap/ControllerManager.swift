@@ -75,8 +75,7 @@ final class ControllerManager {
     /// True if Touchpad click is pressed.
     private(set) var buttonTouchpadPressed = false
     /// True if Share button is pressed.
-    private(set) var buttonSharePressed = false
-    /// True if Options button is pressed.
+    private(set) var buttonSharePressed = false    /// True if Options button is pressed.
     private(set) var buttonOptionsPressed = false
 
     /// Last gyro rotation rate (raw int16 values).
@@ -318,9 +317,11 @@ final class ControllerManager {
         // Convert gyro rate (raw int16) to pixels.
         // DS4 gyro raw values are typically in range ±4000+ per degree/sec.
         let pixelsPerUnit: CGFloat = 0.1
-        let dx = CGFloat(rateY) * CGFloat(dt) * pixelsPerUnit * sensitivity
+        var dx = CGFloat(rateY) * CGFloat(dt) * pixelsPerUnit * sensitivity
         var dy = CGFloat(rateX) * CGFloat(dt) * pixelsPerUnit * sensitivity
 
+        // Apply axis inversion (gyro only).
+        if invertX { dx = -dx }
         if invertY { dy = -dy }
 
         lastGyroDelta = CGPoint(x: dx, y: dy)
@@ -380,10 +381,6 @@ final class ControllerManager {
         // Apply deadzone.
         if abs(deltaX) < deadzone { deltaX = 0 }
         if abs(deltaY) < deadzone { deltaY = 0 }
-
-        // Apply axis inversion.
-        if invertX { deltaX = -deltaX }
-        if invertY { deltaY = -deltaY }
 
         let pixelsPerUnit: CGFloat = 500.0
         let dx = deltaX * pixelsPerUnit * sensitivity

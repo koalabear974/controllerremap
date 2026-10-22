@@ -292,7 +292,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Touchpad click indicator label
         touchpadClickLabel = NSTextField(labelWithString: "Touchpad: released")
-        touchpadClickLabel.font = NSFont.systemFont(ofSize: 11)
+        touchpadClickLabel.font = NSFont.systemFont(ofSize: 12, weight: .bold)
         touchpadClickLabel.textColor = .secondaryLabelColor
         touchpadClickLabel.alignment = .center
 
@@ -558,17 +558,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Touchpad normalized (0-1) mapped to 190x120 box (center at 95,60).
         let tpDotX = 5 + t.x * 180
         let tpDotY = 5 + (1 - t.y) * 110 // Y inverted for screen coords
-        tpDotView.frame = CGRect(x: tpDotX, y: tpDotY, width: 10, height: 10)
 
-        // Update touchpad dot color and click label based on touch state.
+        // Update touchpad dot color based on touch state.
         tpDotView.layer?.backgroundColor = manager.touchpadActive
             ? NSColor.systemGreen.cgColor
             : NSColor.systemBlue.cgColor
-        touchpadClickLabel.textColor = manager.touchpadActive
+
+        // Make touchpad dot bigger and red when clicked.
+        if manager.buttonTouchpadPressed {
+            tpDotView.layer?.cornerRadius = 8
+            tpDotView.frame = CGRect(x: tpDotX - 3, y: tpDotY - 3, width: 16, height: 16)
+            tpDotView.layer?.backgroundColor = NSColor.systemRed.cgColor
+        } else {
+            tpDotView.layer?.cornerRadius = 5
+            tpDotView.frame = CGRect(x: tpDotX, y: tpDotY, width: 10, height: 10)
+        }
+
+        // Update touchpad click label.
+        let isTouching = manager.touchpadActive || manager.buttonTouchpadPressed
+        touchpadClickLabel.textColor = isTouching
             ? NSColor.systemGreen
             : NSColor.systemGray
-        touchpadClickLabel.stringValue = manager.touchpadActive
-            ? "Touchpad: touched"
+        touchpadClickLabel.stringValue = isTouching
+            ? "Touchpad: active"
             : "Touchpad: released"
     }
 
