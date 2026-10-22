@@ -144,15 +144,10 @@ final class ControllerManager {
 
         let now = CFAbsoluteTimeGetCurrent()
 
-        // ---- Gyro integration ----
-        if mode == .gyro || mode == .both {
-            applyGyroIntegration(now: now)
-        }
-
-        // ---- Touchpad integration ----
-        if mode == .touchpad || mode == .both {
-            applyTouchpadIntegration(now: now)
-        }
+        // Gyro and touchpad input is processed directly in the HID callback
+        // (handleDS4Report → accumulateGyro / accumulateTouchpad) where we
+        // have the actual delta values. This avoids a race condition where
+        // tick() could read stale/zero deltas.
     }
 
     /// Set callback for controller connection/disconnection events.
@@ -332,15 +327,16 @@ final class ControllerManager {
             lastMouseDelta.x += dx
             lastMouseDelta.y += dy
             debugLog("    gyro: MOVING dx=\(String(format: "%.2f", dx)) dy=\(String(format: "%.2f", dy)) dt=\(String(format: "%.4f", dt))")
+
+            // Move mouse cursor immediately.
+            mouseMover.moveBy(delta: CGPoint(x: dx, y: dy))
         }
     }
 
     /// Integrates accumulated gyro delta and moves the cursor.
     private func applyGyroIntegration(now: CFTimeInterval) {
-        let delta = lastGyroDelta
-        if abs(delta.x) > 0.5 || abs(delta.y) > 0.5 {
-            mouseMover.moveBy(delta: delta)
-        }
+        // No-op: gyro movement is applied directly in accumulateGyro(report:).
+        // Kept for API compatibility.
     }
 
     // MARK: - Touchpad accumulation (called from HID callback)
@@ -394,14 +390,15 @@ final class ControllerManager {
             lastMouseDelta.x += dx
             lastMouseDelta.y += dy
             debugLog("    touchpad: MOVING dx=\(String(format: "%.2f", dx)) dy=\(String(format: "%.2f", dy))")
+
+            // Move mouse cursor immediately.
+            mouseMover.moveBy(delta: CGPoint(x: dx, y: dy))
         }
     }
 
     /// Integrates accumulated touchpad delta and moves the cursor.
     private func applyTouchpadIntegration(now: CFTimeInterval) {
-        let delta = lastTouchpadDelta
-        if abs(delta.x) > 0.5 || abs(delta.y) > 0.5 {
-            mouseMover.moveBy(delta: delta)
-        }
+        // No-op: touchpad movement is applied directly in accumulateTouchpad(report:).
+        // Kept for API compatibility.
     }
 }
