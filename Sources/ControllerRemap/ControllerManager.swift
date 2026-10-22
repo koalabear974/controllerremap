@@ -321,8 +321,8 @@ final class ControllerManager {
         var dy = CGFloat(rateX) * CGFloat(dt) * pixelsPerUnit * sensitivity
 
         // Apply axis inversion (gyro only).
-        if invertX { dx = -dx }
-        if invertY { dy = -dy }
+        if invertX { dx = -dx; debugLog("    gyro: INVERT X applied") }
+        if invertY { dy = -dy; debugLog("    gyro: INVERT Y applied") }
 
         lastGyroDelta = CGPoint(x: dx, y: dy)
 

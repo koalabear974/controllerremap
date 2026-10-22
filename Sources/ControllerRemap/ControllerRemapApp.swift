@@ -548,8 +548,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Update gyro X-Y visualizer dot position.
         // Normalize gyro values (±4500 range) to fit in 120x120 view (center at 60,60).
         // Rotate 90 deg: swap X and Y.
-        let normX = max(-1, min(1, g.y / 4500))
-        let normY = max(-1, min(1, g.x / 4500))
+        // Apply invert X/Y to match mouse movement direction.
+        var normX = max(-1, min(1, g.y / 4500))
+        var normY = max(-1, min(1, g.x / 4500))
+        if manager.invertX { normX = -normX }
+        if manager.invertY { normY = -normY }
         let dotX = 55 + CGFloat(normX) * 50
         let dotY = 55 - CGFloat(normY) * 50 // Y inverted for screen coords
         gyroDotView.frame = CGRect(x: dotX, y: dotY, width: 10, height: 10)
