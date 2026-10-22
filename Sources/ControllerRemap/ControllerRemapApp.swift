@@ -178,6 +178,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         deltaLabel.textColor = .tertiaryLabelColor
 
         // ---- Assemble ----
+        let container = NSView()
+        container.wantsLayer = true
+        container.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        container.addSubview(stack)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
+            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
+            stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 16),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor, constant: -16),
+            container.heightAnchor.constraint(greaterThanOrEqualToConstant: 380),
+            container.widthAnchor.constraint(greaterThanOrEqualToConstant: 360),
+        ])
+
         stack.addArrangedSubview(statusRow)
         stack.addArrangedSubview(a11yRow)
         stack.addArrangedSubview(NSView()) // spacer
@@ -206,7 +221,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.titlebarAppearsTransparent = false
         window.titleVisibility = .visible
         window.backgroundColor = .windowBackgroundColor
-        window.contentView = stack
+        window.isOpaque = true
+        window.contentView = container
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
@@ -265,7 +281,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateAccessibilityDot() {
         guard let a11yDot = a11yDot, let a11yLabel = a11yLabel else { return }
-        let trusted = AXIsProcessTrusted()
+        let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as NSString
+        let options: NSDictionary = [promptKey: true]
+        let trusted = AXIsProcessTrustedWithOptions(options)
         a11yDot.layer?.backgroundColor = trusted
             ? NSColor.systemGreen.cgColor
             : NSColor.systemRed.cgColor
